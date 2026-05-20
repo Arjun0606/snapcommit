@@ -97,9 +97,24 @@ claude mcp add snapcommit -- npx -y @snapcommit/mcp
 
 ## Pricing
 
-**Free. Forever. MIT licensed.**
+**Free tier (forever, MIT open source):**
+- Local SQLite memory storage
+- All MCP tools (save, recall, list, export, update, delete)
+- Notion sync (your own workspace)
+- Keyword search
+- Web dashboard
+- Auto-installer for 30+ MCP clients
 
-We don't store your data, so we don't have storage costs to charge for. The product is free open source. If we ever monetize, it'll be optional convenience tooling — never paid storage tiers, never feature gating the memory itself.
+**Snapcommit Pro — $9/mo:**
+- **Smart AI extraction** — Claude/GPT writes better memories than regex can
+- **Semantic search** — find memories by meaning, not just keywords
+- **Auto-deduplication** — never save the same fact twice
+- **Memory consolidation** — old related memories collapse into summaries
+- **Conflict detection** — alerts when new memory contradicts an old one
+
+**Lifetime — $149 one-time** (first 500 backers only): all Pro features forever, founder badge.
+
+**Storage stays free, always.** We don't host your data. Notion does (your own workspace). We charge only for AI features Notion can't do.
 
 ## Privacy
 

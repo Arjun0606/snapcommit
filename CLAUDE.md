@@ -31,11 +31,53 @@ We do NOT run cloud infrastructure to store user data. Ever. This kills an entir
 The Plaid/Stripe pattern: we are the wire between the AI tool and the user's own storage. The user picks the storage.
 
 What this means concretely:
-- v1 = free, MIT, open source forever — no paid tier for storage
-- Future revenue (if any) = optional managed/hosted convenience, or premium clients, never paid storage
+- Storage, sync, sharing, backup, mobile = always free (user provides via Notion)
+- **Revenue model**: Snapcommit Pro charges for AI-powered features the free tier can't do
 - Sharing = "share your Notion database with your teammate" (Notion already does this perfectly)
 - Cross-device = "log into Notion from your laptop and phone" (already solved)
 - Backup = "your Notion workspace is the backup"
+
+## Pricing (locked)
+
+**Target**: $100K MRR ceiling, solo-sustainable, consistent revenue (not lottery).
+
+**Free tier (forever, MIT)**:
+- Local SQLite memory store
+- All 7 local memory tools
+- Auto-installer for 30+ MCP clients
+- Web dashboard (local)
+- Notion sync (user's own workspace)
+- Keyword/FTS5 search
+- Regex-based extraction
+
+**Snapcommit Pro — $9/mo**:
+- **Smart AI extraction** — uses Claude/GPT to extract decisions, rejections, preferences with high accuracy (vs free tier's regex heuristics)
+- **Semantic search** — find memories by meaning, not just keywords
+- **Auto-deduplication** — merges "use SQLite" saved 3 times into one memory
+- **Memory consolidation** — periodically condenses related memories into summaries
+- **Conflict detection** — alerts when a new memory contradicts an old one
+- **Advanced project routing** — LLM-disambiguated, not just git remote
+
+**Lifetime backer — $149 one-time**:
+- All Pro features, forever
+- Founder badge
+- Early adopters tier, capped at 500 buyers
+- Generates cash upfront for development
+
+**What we DON'T charge for**:
+- Storage (Notion does it free)
+- Sync (Notion does it free)
+- Sharing (Notion does it free)
+- Team plans (don't exist — Notion handles team sharing)
+- Memory count limits (arbitrary, feels punitive)
+- "Premium" support (just answer GitHub issues like a human)
+
+**Why this works**:
+- Pro features cost ~$0.70/user/month to serve (API + Stripe + hosting)
+- 92% margin at $9/mo
+- 11K paying users = $100K MRR (1% of plausibly addressable AI power user base)
+- All Pro features are stateless API calls — no database to maintain
+- Free tier is genuinely useful, not crippled
 
 ## Hard constraints
 
