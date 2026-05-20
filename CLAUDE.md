@@ -60,35 +60,66 @@ The Plaid pattern, taken further: we are not even an opinionated wire. The user 
 - Keyword/FTS5 search
 - Regex-based extraction
 
-**Snapcommit Pro — $99 one-time (lifetime) via Dodo Payments**:
-- **Smart AI extraction** — uses the user's own Anthropic/OpenAI API key (BYOK) to extract decisions, rejections, preferences with high accuracy. We never see their content.
-- **Semantic search** — find memories by meaning, not just keywords
-- **Auto-deduplication** — merges duplicates
-- **Memory consolidation** — condenses related memories into summaries
-- **Conflict detection** — alerts when new memory contradicts old one
-- **Multi-device awareness** — shows last-write device, surfaces conflicts
-- **Advanced project routing** — LLM-disambiguated, not just git remote
+**Tiered SaaS via Dodo Payments. We provide the AI compute. We never store content.**
 
-**Snapcommit Pro Yearly — $19/year** (for users who want a cheaper entry):
-- Same Pro features, recurring instead of lifetime
+Architecture:
+- User content lives in user's file (local + their cloud folder)
+- When user invokes a Pro feature, the local MCP server POSTs to our API
+- Our API proxies to OpenAI/Anthropic using OUR key, counts usage, returns
+- Content is processed in-flight, never persisted server-side
+- Only metadata logged (user_id, timestamp, model, token count, success) — never prompts or content
+
+**Free** — $0/mo
+- All local memory tools (save/recall/list/projects/update/delete/export)
+- File-based storage in user's chosen path (local or cloud folder)
+- Notion adapter
+- All 30+ MCP clients supported
+- **5 smart-extraction calls/month** (taste of Pro)
+- Keyword search
+
+**Hobby** — $9/mo
+- Everything in Free
+- **200 smart-extraction calls/month**
+- Semantic search
+- Auto-deduplication
+- Email support (best-effort)
+
+**Pro** — $29/mo
+- Everything in Hobby
+- **2,000 smart-extraction calls/month**
+- Memory consolidation (auto-condense related memories)
+- Conflict detection across devices
+- Priority response on issues
+
+**Studio** — $99/mo
+- Everything in Pro
+- **10,000 smart-extraction calls/month** (fair use)
+- Custom extraction prompts
+- Early access to new features
 
 **What we DON'T charge for**:
-- Storage (it's a file the user owns)
+- Storage (file the user owns)
 - Sync (user's cloud provider does it)
 - Sharing (user's cloud provider does it)
-- Team plans (don't exist — shared cloud folders are the team feature)
-- Memory count limits (feels punitive, kills adoption)
-- API inference costs (BYOK — user pays their own provider)
-- Server-hosted dashboards beyond the local one (run yourself or pay your own host)
+- Memory count (no arbitrary limits — they own the file)
+- Self-hosted Notion adapter
+- Number of devices
 
-**Why this works (autopilot math)**:
-- Dodo Payments is merchant of record — handles US/EU/UK/CA/AU sales tax and VAT
-- BYOK = $0 API cost to us (user uses their own Anthropic/OpenAI key)
-- License key check is ~50 lines on Cloudflare Workers free tier (covers 100K+ daily checks)
-- Per-sale cost: ~$5 (Dodo fee + payment processor). Net ~$94 per lifetime sale. 95% margin.
-- To hit ~$100K/month average: ~12K lifetime sales/year, or 7K Pro Yearly subs at $19, or any mix
-- All Pro features run client-side using user's API key → zero infra burden per user
-- Free tier is genuinely useful (full local memory, all CRUD, MCP, Notion adapter), not crippled
+**Math (autopilot via Dodo + tiered SaaS)**:
+- Cost per extraction (Anthropic Haiku, ~3K in / 500 out): ~$0.0044
+- Hobby $9: ~$0.88 cost @ 200 calls = ~90% margin
+- Pro $29: ~$8.80 cost @ 2000 calls = ~70% margin
+- Studio $99: ~$44 cost @ 10000 calls = ~55% margin
+- Dodo Payments merchant of record = handles tax compliance globally
+- Cloudflare Workers/D1 for usage tracking = free tier covers tens of thousands of users
+- To hit ~$100K MRR: blended ~5,500 paying users across tiers (achievable)
+
+**Why this is autopilot**:
+- One API key (ours) instead of N user keys to manage
+- We process, we don't store → minimal compliance burden
+- Stripe-like subscriptions through Dodo (tax handled)
+- Usage caps make Studio profitable even for power users
+- Free tier broad (no AI-feature lock-in for early users), Pro-tier upsell natural when they want more extraction
 
 ## Hard constraints
 

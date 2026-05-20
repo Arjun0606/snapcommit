@@ -6,8 +6,10 @@ import {
   readConfig,
   writeConfig,
   resolveStoragePath,
-  hasPro,
-  getApiKey,
+  isAuthenticated,
+  currentTier,
+  currentQuota,
+  TIER_QUOTAS,
 } from "../src/config.js";
 
 // config.ts re-reads from $HOME on every call, so we can swap HOME per-test.
@@ -33,18 +35,19 @@ describe("config", () => {
   });
 
   it("writeConfig persists values across reads", () => {
-    writeConfig({ preferredProvider: "openai", openaiApiKey: "sk-test123456789012345" });
+    writeConfig({ apiToken: "tok_abcdef1234567890", tier: "pro", monthlyQuota: 2000 });
     const after = readConfig();
-    expect(after.preferredProvider).toBe("openai");
-    expect(after.openaiApiKey).toBe("sk-test123456789012345");
+    expect(after.apiToken).toBe("tok_abcdef1234567890");
+    expect(after.tier).toBe("pro");
+    expect(after.monthlyQuota).toBe(2000);
   });
 
   it("writeConfig merges with existing config (does not overwrite)", () => {
-    writeConfig({ anthropicApiKey: "ant-key" });
-    writeConfig({ openaiApiKey: "oai-key" });
+    writeConfig({ apiToken: "tok_xxx" });
+    writeConfig({ tier: "hobby" });
     const after = readConfig();
-    expect(after.anthropicApiKey).toBe("ant-key");
-    expect(after.openaiApiKey).toBe("oai-key");
+    expect(after.apiToken).toBe("tok_xxx");
+    expect(after.tier).toBe("hobby");
   });
 
   it("resolveStoragePath honors SNAPCOMMIT_STORAGE env var", () => {
@@ -61,24 +64,30 @@ describe("config", () => {
     expect(resolveStoragePath()).toBe(join(tempHome, ".snapcommit-mcp", "memories.db"));
   });
 
-  it("hasPro returns true only when license is active", () => {
-    expect(hasPro()).toBe(false);
-    writeConfig({ licenseStatus: "active" });
-    expect(hasPro()).toBe(true);
-    writeConfig({ licenseStatus: "expired" });
-    expect(hasPro()).toBe(false);
+  it("isAuthenticated reflects whether an API token is stored", () => {
+    expect(isAuthenticated()).toBe(false);
+    writeConfig({ apiToken: "tok_xxx" });
+    expect(isAuthenticated()).toBe(true);
   });
 
-  it("getApiKey returns preferred provider's key when set", () => {
-    writeConfig({
-      anthropicApiKey: "ant-1234567890123456",
-      openaiApiKey: "oai-1234567890123456",
-      preferredProvider: "openai",
-    });
-    expect(getApiKey()).toEqual({ provider: "openai", key: "oai-1234567890123456" });
+  it("currentTier defaults to free when not set", () => {
+    expect(currentTier()).toBe("free");
+    writeConfig({ tier: "studio" });
+    expect(currentTier()).toBe("studio");
   });
 
-  it("getApiKey returns null when no keys configured", () => {
-    expect(getApiKey()).toBeNull();
+  it("currentQuota uses stored value or falls back to tier default", () => {
+    expect(currentQuota()).toBe(TIER_QUOTAS.free);
+    writeConfig({ tier: "hobby" });
+    expect(currentQuota()).toBe(TIER_QUOTAS.hobby);
+    writeConfig({ monthlyQuota: 9999 });
+    expect(currentQuota()).toBe(9999);
+  });
+
+  it("TIER_QUOTAS has correct tier values", () => {
+    expect(TIER_QUOTAS.free).toBe(5);
+    expect(TIER_QUOTAS.hobby).toBe(200);
+    expect(TIER_QUOTAS.pro).toBe(2000);
+    expect(TIER_QUOTAS.studio).toBe(10000);
   });
 });

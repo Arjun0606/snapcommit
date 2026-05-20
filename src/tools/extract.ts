@@ -1,190 +1,251 @@
 /**
  * Snapcommit Pro: smart_extract
  *
- * Takes a chunk of conversation context and extracts structured memories
- * (decisions, rejections, preferences, facts, open questions) using the
- * user's own API key. We never see the content.
+ * Sends a conversation chunk to our cloud API, which proxies to an LLM
+ * (Anthropic/OpenAI) using our own key, counts the call against the user's
+ * monthly quota, and returns structured memories. Content is processed
+ * in-flight and never persisted server-side.
  *
- * Gated on Pro license. Without it, this tool refuses with an upgrade
- * message. With it, calls run against the user's API key, our cost is $0.
+ * Free tier: 5 calls/month. Hobby: 200. Pro: 2,000. Studio: 10,000.
  */
 import { z } from "zod";
 import type { MemoryStore } from "../db.js";
-import { getApiKey, hasPro } from "../config.js";
+import { readConfig, writeConfig } from "../config.js";
 import { detectProject } from "../project.js";
 
-const EXTRACTION_SYSTEM_PROMPT = `You extract structured memories from conversation transcripts.
+const API_BASE = process.env.SNAPCOMMIT_API ?? "https://api.snapcommit.com";
 
-Output ONLY a JSON array. Each item:
-{
-  "content": "the memory itself, written as a concise standalone statement",
-  "kind": "decision" | "rejection" | "preference" | "fact" | "open_question",
-  "tags": ["short", "tags"]
-}
-
-Rules:
-- decision: a choice that was made (e.g., "Use SQLite for local storage")
-- rejection: an approach tried or considered and explicitly rejected, INCLUDING the reason ("Tried X — rejected because Y")
-- preference: stable user/team preference ("Prefers terse code comments")
-- fact: a non-obvious truth about the codebase or domain ("API uses cursor pagination via 'next' param")
-- open_question: unresolved item ("Still unclear whether to use OAuth or API keys")
-
-Be ruthless. Skip small talk. Skip things that are already documented. Skip restated obvious facts. Only emit memories worth surfacing in a future session.
-
-Maximum 8 memories per call.
-Output strictly valid JSON. No prose. No code fences. Just the array.`;
-
-async function callAnthropic(apiKey: string, content: string): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 2048,
-      system: EXTRACTION_SYSTEM_PROMPT,
-      messages: [{ role: "user", content }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as { content: Array<{ type: string; text?: string }> };
-  return data.content.find((c) => c.type === "text")?.text ?? "[]";
-}
-
-async function callOpenAI(apiKey: string, content: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-        { role: "user", content },
-      ],
-      response_format: { type: "json_object" },
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as {
-    choices: Array<{ message: { content: string } }>;
-  };
-  const raw = data.choices[0]?.message?.content ?? "[]";
-  // OpenAI's JSON mode wraps in an object — accept either shape
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return raw;
-    if (parsed.memories && Array.isArray(parsed.memories)) {
-      return JSON.stringify(parsed.memories);
-    }
-    return "[]";
-  } catch {
-    return "[]";
-  }
-}
-
-interface Extracted {
+interface ExtractedMemory {
   content: string;
   kind: "decision" | "rejection" | "preference" | "fact" | "open_question";
   tags: string[];
 }
 
-function parseExtracted(raw: string): Extracted[] {
-  // Strip code fences if model added them despite instructions
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+interface ExtractResponse {
+  memories: ExtractedMemory[];
+  usage: { used_this_month: number; monthly_quota: number };
+}
+
+interface ExtractError {
+  error: string;
+  code?: "quota_exceeded" | "unauthorized" | "server_error";
+  upgrade_url?: string;
+}
+
+async function callCloudExtract(
+  token: string,
+  content: string,
+): Promise<ExtractResponse | ExtractError> {
   try {
-    const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (x): x is Extracted =>
-        typeof x?.content === "string" &&
-        typeof x?.kind === "string" &&
-        ["decision", "rejection", "preference", "fact", "open_question"].includes(x.kind),
-    );
-  } catch {
-    return [];
+    const res = await fetch(`${API_BASE}/v1/extract`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (res.status === 402 || res.status === 429) {
+      const body = (await res.json().catch(() => ({}))) as { upgrade_url?: string };
+      return {
+        error: "Monthly quota exceeded",
+        code: "quota_exceeded",
+        upgrade_url: body.upgrade_url ?? "https://snapcommit.com/pricing",
+      };
+    }
+    if (res.status === 401) {
+      return { error: "Invalid or expired token", code: "unauthorized" };
+    }
+    if (!res.ok) {
+      return { error: `API ${res.status}: ${await res.text()}`, code: "server_error" };
+    }
+
+    return (await res.json()) as ExtractResponse;
+  } catch (e) {
+    return { error: (e as Error).message, code: "server_error" };
   }
 }
 
 export const smartExtractSchema = {
-  content: z.string().min(20).describe("Conversation transcript or notes to extract memories from. Paste a session summary, recent exchanges, or any text."),
-  project: z.string().optional().describe("Project to tag the extracted memories with. Auto-detected from git remote if omitted."),
-  dry_run: z.boolean().optional().describe("If true, return the extracted memories without saving. Default false."),
+  content: z
+    .string()
+    .min(20)
+    .describe(
+      "Conversation transcript or session summary to extract structured memories from. Paste a recent session, a summary, or notes.",
+    ),
+  project: z
+    .string()
+    .optional()
+    .describe(
+      "Project to tag the extracted memories with. Auto-detected from git remote / CWD if omitted.",
+    ),
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe("If true, return extracted memories without saving them locally."),
 };
 
 export function smartExtract(store: MemoryStore) {
   return async (args: { content: string; project?: string; dry_run?: boolean }) => {
-    if (!hasPro()) {
+    const cfg = readConfig();
+    if (!cfg.apiToken) {
       return {
-        content: [{
-          type: "text" as const,
-          text: "smart_extract requires Snapcommit Pro.\n\nPro is $99 lifetime via Dodo Payments. It unlocks LLM-based memory extraction using your own API key (BYOK — we never see your content). Visit https://snapcommit.com/pro to upgrade. Already have a key? Call snapcommit_activate_license with it.",
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              "Not signed in. smart_extract uses Snapcommit's cloud for AI extraction (we never store your content — it's processed in-flight only).",
+              "",
+              "Get a free account at https://snapcommit.com/signup (5 extractions/month free), then run snapcommit_login with your token.",
+            ].join("\n"),
+          },
+        ],
         isError: true,
       };
     }
 
-    const apiKey = getApiKey();
-    if (!apiKey) {
+    const result = await callCloudExtract(cfg.apiToken, args.content);
+
+    if ("error" in result) {
+      const tips: string[] = [];
+      if (result.code === "quota_exceeded") {
+        tips.push("");
+        tips.push(`You're out of smart-extraction calls for this month.`);
+        tips.push(`Upgrade: ${result.upgrade_url}`);
+        tips.push(`Free tier: 5/mo. Hobby $9: 200. Pro $29: 2000. Studio $99: 10000.`);
+      } else if (result.code === "unauthorized") {
+        tips.push("");
+        tips.push("Re-run snapcommit_login with a fresh token from https://snapcommit.com/account.");
+      }
       return {
-        content: [{
-          type: "text" as const,
-          text: "No API key configured. Pro extraction uses YOUR Anthropic or OpenAI key (BYOK). Set one with: snapcommit_set_api_key provider=anthropic key=sk-...",
-        }],
+        content: [
+          { type: "text" as const, text: `Extraction failed: ${result.error}${tips.join("\n")}` },
+        ],
         isError: true,
       };
     }
 
-    let raw: string;
-    try {
-      raw = apiKey.provider === "anthropic"
-        ? await callAnthropic(apiKey.key, args.content)
-        : await callOpenAI(apiKey.key, args.content);
-    } catch (e) {
-      return {
-        content: [{ type: "text" as const, text: `Extraction call failed: ${(e as Error).message}` }],
-        isError: true,
-      };
-    }
+    // Update cached usage
+    writeConfig({
+      monthlyQuota: result.usage.monthly_quota,
+      tierVerifiedAt: new Date().toISOString(),
+    });
 
-    const extracted = parseExtracted(raw);
-    if (extracted.length === 0) {
+    if (result.memories.length === 0) {
       return {
-        content: [{ type: "text" as const, text: "No memories worth extracting from that content." }],
+        content: [
+          {
+            type: "text" as const,
+            text: `No memories worth extracting. (${result.usage.used_this_month} / ${result.usage.monthly_quota} used this month.)`,
+          },
+        ],
       };
     }
 
     const project = args.project ?? detectProject() ?? undefined;
 
     if (args.dry_run) {
-      const summary = extracted
-        .map((m, i) => `${i + 1}. [${m.kind}] ${m.content}${m.tags.length ? ` (${m.tags.join(", ")})` : ""}`)
+      const summary = result.memories
+        .map(
+          (m, i) =>
+            `${i + 1}. [${m.kind}] ${m.content}${m.tags.length ? ` (${m.tags.join(", ")})` : ""}`,
+        )
         .join("\n");
       return {
-        content: [{
-          type: "text" as const,
-          text: `Would extract ${extracted.length} memories (dry-run):\n\n${summary}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              `Would extract ${result.memories.length} memories (dry-run):`,
+              "",
+              summary,
+              "",
+              `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} this month`,
+            ].join("\n"),
+          },
+        ],
       };
     }
 
-    const saved = extracted.map((m) => store.save({
-      content: m.content,
-      kind: m.kind,
-      tags: m.tags,
-      project,
-    }));
+    const saved = result.memories.map((m) =>
+      store.save({ content: m.content, kind: m.kind, tags: m.tags, project }),
+    );
 
     return {
-      content: [{
-        type: "text" as const,
-        text: `Extracted and saved ${saved.length} memories${project ? ` (project: ${project})` : ""}.\n\nIDs: ${saved.map((s) => "#" + s.id).join(", ")}`,
-      }],
+      content: [
+        {
+          type: "text" as const,
+          text: [
+            `Saved ${saved.length} memories${project ? ` (project: ${project})` : ""}.`,
+            `IDs: ${saved.map((s) => "#" + s.id).join(", ")}`,
+            ``,
+            `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} smart-extractions this month`,
+          ].join("\n"),
+        },
+      ],
     };
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// snapcommit_usage — quick quota check
+// ────────────────────────────────────────────────────────────────────────────
+
+export function usage() {
+  return async () => {
+    const cfg = readConfig();
+    if (!cfg.apiToken) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Not signed in. Free tier: 5 smart-extractions/month. Sign up at https://snapcommit.com/signup",
+          },
+        ],
+      };
+    }
+    // Light call: hit /v1/account to get fresh usage
+    try {
+      const res = await fetch(`${API_BASE}/v1/account`, {
+        headers: { authorization: `Bearer ${cfg.apiToken}` },
+      });
+      if (!res.ok) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Tier (cached): ${cfg.tier ?? "free"}\nQuota (cached): ${cfg.monthlyQuota ?? 5}\nLive check failed (${res.status}).`,
+            },
+          ],
+        };
+      }
+      const acct = (await res.json()) as {
+        tier: string;
+        monthly_quota: number;
+        used_this_month: number;
+      };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              `Tier: ${acct.tier}`,
+              `Used: ${acct.used_this_month} / ${acct.monthly_quota} smart-extractions`,
+              `Remaining: ${acct.monthly_quota - acct.used_this_month}`,
+            ].join("\n"),
+          },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Couldn't reach Snapcommit cloud (${(e as Error).message}). Cached tier: ${cfg.tier ?? "free"}.`,
+          },
+        ],
+      };
+    }
   };
 }

@@ -25,16 +25,15 @@ import {
   storageInfo,
   setStoragePath,
   setStoragePathSchema,
-  setApiKey,
-  setApiKeySchema,
   status,
 } from "./tools/storage.js";
-import { smartExtract, smartExtractSchema } from "./tools/extract.js";
+import { smartExtract, smartExtractSchema, usage } from "./tools/extract.js";
 import {
-  activateLicense,
-  activateLicenseSchema,
-  licenseStatus,
-} from "./tools/license.js";
+  login,
+  loginSchema,
+  accountStatus,
+  logout,
+} from "./tools/account.js";
 
 async function main(): Promise<void> {
   const store = new MemoryStore();
@@ -112,46 +111,54 @@ async function main(): Promise<void> {
   );
 
   server.tool(
-    "snapcommit_set_api_key",
-    "Store the user's own Anthropic or OpenAI API key locally for Pro features (BYOK — Bring Your Own Key). The key never leaves their machine.",
-    setApiKeySchema,
-    setApiKey(),
-  );
-
-  server.tool(
     "snapcommit_status",
-    "Show overall Snapcommit state: storage path, license tier, API key status, preferred provider.",
+    "Show overall Snapcommit state: storage path, signed-in status, tier, monthly quota.",
     {},
     status(),
   );
 
   // ──────────────────────────────────────────────────────────────────────
-  // Pro: smart_extract (BYOK)
+  // Account + tiered subscriptions (Snapcommit cloud / Dodo Payments)
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_login",
+    "Sign in with the API token you received by email after signing up at https://snapcommit.com/signup. Token is stored locally with chmod 600. Required for AI extraction features. Free tier ships with 5 calls/month; paid tiers unlock more.",
+    loginSchema,
+    login(),
+  );
+
+  server.tool(
+    "snapcommit_account_status",
+    "Show current subscription tier, monthly quota, and usage. Calls our cloud to refresh; falls back to cached state when offline.",
+    {},
+    accountStatus(),
+  );
+
+  server.tool(
+    "snapcommit_logout",
+    "Sign out and clear the local API token. Local memories stay on disk untouched.",
+    {},
+    logout(),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // smart_extract — uses Snapcommit cloud (our LLM key). Content is
+  // processed in-flight; we never store it server-side.
   // ──────────────────────────────────────────────────────────────────────
 
   server.tool(
     "snapcommit_smart_extract",
-    "Pro feature: extract structured memories (decisions, rejections, preferences, facts, open questions) from a conversation summary using the user's own LLM API key. Higher quality than the free tier's keyword-based capture. Requires Pro license + a configured API key.",
+    "Extract structured memories from a conversation summary or transcript: decisions, rejections (with reasons), preferences, facts, open questions. Uses Snapcommit's cloud for LLM extraction (we never store your content — processed in-flight only). Counts against your monthly quota. Free: 5/mo. Hobby: 200. Pro: 2000. Studio: 10000.",
     smartExtractSchema,
     smartExtract(store),
   );
 
-  // ──────────────────────────────────────────────────────────────────────
-  // License management (Dodo Payments)
-  // ──────────────────────────────────────────────────────────────────────
-
   server.tool(
-    "snapcommit_activate_license",
-    "Activate a Snapcommit Pro license. Verify a key purchased via Dodo Payments and unlock Pro features. The key is stored locally; verification happens online once and is cached.",
-    activateLicenseSchema,
-    activateLicense(),
-  );
-
-  server.tool(
-    "snapcommit_license_status",
-    "Show current license tier and last verification timestamp.",
+    "snapcommit_usage",
+    "Show how many smart-extraction calls have been used this month and how many remain on the current tier.",
     {},
-    licenseStatus(),
+    usage(),
   );
 
   // ──────────────────────────────────────────────────────────────────────

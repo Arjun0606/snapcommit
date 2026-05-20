@@ -12,22 +12,28 @@ import { existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "n
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 
+export type Tier = "free" | "hobby" | "pro" | "studio";
+
 export interface UserConfig {
   /** Where memories.db lives. Defaults to ~/.snapcommit-mcp/memories.db. */
   storagePath?: string;
-  /** Anthropic API key (Pro features). BYOK — we never see it. */
-  anthropicApiKey?: string;
-  /** OpenAI API key (Pro features). BYOK. */
-  openaiApiKey?: string;
-  /** Preferred provider for Pro AI calls. */
-  preferredProvider?: "anthropic" | "openai";
-  /** Pro license key from Dodo Payments. */
-  licenseKey?: string;
-  /** Last verified license state (cached locally). */
-  licenseStatus?: "active" | "expired" | "invalid" | "unknown";
+  /** Snapcommit account API token (issued at signup, used to auth cloud calls). */
+  apiToken?: string;
+  /** Current subscription tier (cached). */
+  tier?: Tier;
+  /** Monthly extraction quota for this tier (cached). */
+  monthlyQuota?: number;
   /** Last verification timestamp. */
-  licenseVerifiedAt?: string;
+  tierVerifiedAt?: string;
 }
+
+/** Quota by tier — kept in code for offline display; server is source of truth. */
+export const TIER_QUOTAS: Record<Tier, number> = {
+  free: 5,
+  hobby: 200,
+  pro: 2000,
+  studio: 10000,
+};
 
 function configDir(): string {
   return join(homedir(), ".snapcommit-mcp");
@@ -75,22 +81,17 @@ export function resolveStoragePath(): string {
   return join(configDir(), "memories.db");
 }
 
-export function hasPro(): boolean {
+export function isAuthenticated(): boolean {
   const cfg = readConfig();
-  return cfg.licenseStatus === "active";
+  return Boolean(cfg.apiToken);
 }
 
-export function getApiKey(): { provider: "anthropic" | "openai"; key: string } | null {
+export function currentTier(): Tier {
   const cfg = readConfig();
-  const preferred = cfg.preferredProvider ?? "anthropic";
-  if (preferred === "anthropic" && cfg.anthropicApiKey) {
-    return { provider: "anthropic", key: cfg.anthropicApiKey };
-  }
-  if (preferred === "openai" && cfg.openaiApiKey) {
-    return { provider: "openai", key: cfg.openaiApiKey };
-  }
-  // Fallback: whichever is set
-  if (cfg.anthropicApiKey) return { provider: "anthropic", key: cfg.anthropicApiKey };
-  if (cfg.openaiApiKey) return { provider: "openai", key: cfg.openaiApiKey };
-  return null;
+  return cfg.tier ?? "free";
+}
+
+export function currentQuota(): number {
+  const cfg = readConfig();
+  return cfg.monthlyQuota ?? TIER_QUOTAS[currentTier()];
 }

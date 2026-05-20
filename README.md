@@ -1,132 +1,98 @@
 # Snapcommit
 
-**The memory layer for your AI tools.** One MCP server. Works across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf, Codex CLI, Gemini CLI + 22 more clients. Your memories live in a file you own. Sync however you want.
+**The memory layer for your AI tools.** One MCP server. Works across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf, Codex CLI, Gemini CLI + 22 more clients.
+
+Your memories live in a file you own. Sync however you want — iCloud, Dropbox, Notion, anything. Pro features run AI extraction on your conversations, processed in-flight, never stored.
 
 ```bash
 npx @snapcommit/install
 ```
-
-That's it. We detect every MCP-capable AI tool on your machine and wire Snapcommit into each. Your AI now remembers across every session and every tool.
 
 ## Why
 
-Reddit's #1 complaint about AI tools is "they never remember me." 91 hours/year wasted re-explaining context per solo founder.
+Reddit's #1 dev complaint about AI tools is "they never remember me." 91 hours/year wasted re-explaining context.
 
 Existing fixes are bad:
-- **OpenMemory** claims local-first but ships your data to Mem0's cloud
-- **Supermemory** is server-side, $19/mo subscription
-- **Mem AI** burned $40M trying to be the database, now pivoting
-- **Markdown files** go stale, don't sync, live in 4 different formats per tool
+- **OpenMemory** claims local-first but ships data to Mem0's cloud
+- **Supermemory** is server-side, $19/mo, holds your data
+- **Mem AI** burned $40M trying to be the database, pivoted
+- **Markdown files** go stale, don't sync, live in 4 formats per tool
 
-Snapcommit is **genuinely** local-first. Your memories live in a single file on your machine that you own. If you want cross-device sync or team sharing, you put that file in a cloud folder you already use — iCloud, Dropbox, OneDrive, Google Drive, whatever. We host nothing. We're the wire, not the warehouse.
-
-## How sync works (it's already solved)
-
-| You want | You do | Result |
-|---|---|---|
-| Single device, offline | Nothing. Defaults work. | Fast, private, no internet needed |
-| Sync across your own devices | Put the file in iCloud / Dropbox / OneDrive | Your existing cloud provider auto-syncs |
-| Share with a teammate | Put the file in a shared cloud folder | Notion-grade sharing for free, no logins, no UI |
-| New laptop | Install Snapcommit, point at the same cloud-folder path | Memory carries over instantly |
-
-The setup command for cloud-syncing on Mac:
-> *In your AI: "Move Snapcommit storage to `~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db`"*
-
-That's the whole "cross-device sync feature." iCloud handles the rest.
-
-## What it does
-
-13 MCP tools your AI calls automatically:
-
-### Memory (free, always-on, local)
-
-| Tool | When |
-|------|------|
-| `save_memory` | Decisions, things tried-and-rejected (with reasons), preferences, facts, open questions |
-| `recall_memory` | At session start or when past context matters |
-| `list_memories` | Browse without searching |
-| `list_projects` | Orient across projects |
-| `update_memory` / `delete_memory` | Revise or remove |
-| `export_memories` | JSON or Markdown, anywhere |
-
-### Storage + config
-
-| Tool | When |
-|------|------|
-| `snapcommit_storage_info` | Show where memories live + sync suggestions |
-| `snapcommit_set_storage_path` | Point at a cloud-synced folder for device/team sync |
-| `snapcommit_set_api_key` | Bring your own Anthropic/OpenAI key for Pro features |
-| `snapcommit_status` | Overall state of the world |
-
-### Snapcommit Pro ($99 lifetime via Dodo Payments)
-
-| Tool | What it does |
-|------|------|
-| `snapcommit_smart_extract` | LLM-based memory extraction from conversation. Uses YOUR API key (BYOK). Higher quality than the free tier's keyword capture. |
-| `snapcommit_activate_license` | Activate Pro with your license key |
-| `snapcommit_license_status` | Check tier |
-
-### Notion sync (optional advanced adapter)
-
-| Tool | When |
-|------|------|
-| `snapcommit_notion_setup` | Mirror memories to a Notion database in your own workspace, for browsing in Notion's UI |
-| `snapcommit_notion_sync` | Push local → Notion |
-| `snapcommit_notion_status` | Check connection |
-
-**The killer feature**: Snapcommit captures *rejections* with reasons, not just final decisions. Every other memory tool only stores what you ended up doing. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the same mistakes.
+Snapcommit is different:
+- **Your memory, your file.** Lives at a path you choose (local, iCloud, Dropbox, anywhere).
+- **You sync however you want.** We don't build sync — your cloud provider does.
+- **We're a compute service, not a database.** Pro features run extraction in-flight; we never store your conversations.
 
 ## Pricing
 
-**Free tier (forever, MIT)**
-- All 7 local memory tools
-- Storage in a file you own (anywhere you want it)
-- Notion sync adapter
-- Auto-installer for 30+ MCP clients
-- Web dashboard
-- Keyword search
+| Tier | Price | Smart-extractions / month | Other |
+|---|---|---|---|
+| **Free** | $0 | 5 | All local memory features, all 30+ MCP clients, Notion adapter, dashboard |
+| **Hobby** | **$9/mo** | 200 | + semantic search, auto-dedup |
+| **Pro** | **$29/mo** | 2,000 | + memory consolidation, conflict detection, priority support |
+| **Studio** | **$99/mo** | 10,000 | + custom prompts, early access |
 
-**Snapcommit Pro — $99 one-time via Dodo Payments**
-- Smart LLM extraction (uses YOUR Anthropic/OpenAI key — we never see your data)
-- Semantic search (find by meaning, not just keywords)
-- Auto-deduplication
-- Memory consolidation
-- Conflict detection across devices
-- All updates, forever
+All paid tiers handled by [Dodo Payments](https://dodopayments.com) — merchant of record, tax included worldwide.
 
-**Snapcommit Pro Yearly — $19/year** (cheaper upfront)
-- Same Pro features, recurring
+**What we never charge for:** storage, sync, sharing, memory count, devices, team size, the MCP server itself.
 
-**What we never charge for**
-- Storage (the file lives on your machine or your cloud)
-- Sync (your cloud provider does it)
-- Sharing (your cloud provider does it)
-- Memory count (no arbitrary limits)
-- API costs (Pro is BYOK — you use your own provider)
-- Team plans (don't exist — shared folders are the team feature)
+## How sync works (we don't build it)
+
+| You want | You do | Result |
+|---|---|---|
+| Single device | Nothing. Defaults work. | Local file, fast, offline |
+| Sync across your devices | Put the file in iCloud / Dropbox / OneDrive | Your cloud auto-syncs |
+| Share with team | Put the file in a shared cloud folder | Your cloud handles permissions |
+
+The setup is one prompt:
+> *"Move Snapcommit storage to `~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db`"*
+
+Done. iCloud (or whatever you use) handles the rest. Install Snapcommit on your other device, set the same path, memory carries over instantly.
+
+## Tools (15 of them)
+
+### Free (always-on, local)
+- `save_memory` / `recall_memory` / `list_memories` / `list_projects` / `update_memory` / `delete_memory` / `export_memories`
+
+### Account + config
+- `snapcommit_status` — what's going on
+- `snapcommit_login` — sign in with your API token (free tier ships with 5/mo)
+- `snapcommit_account_status` — current tier, quota, usage
+- `snapcommit_logout`
+- `snapcommit_storage_info` / `snapcommit_set_storage_path` — pick where memories live
+
+### Paid (counts against quota)
+- `snapcommit_smart_extract` — LLM-powered memory extraction from a conversation chunk
+- `snapcommit_usage` — quick quota check
+
+### Optional adapter
+- `snapcommit_notion_setup` / `_sync` / `_status` / `_pull` — mirror to your own Notion DB if you want Notion-as-UI
+
+**The killer feature**: Snapcommit captures *rejections* with reasons. Every other tool stores only what you ended up doing. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the mistakes.
 
 ## Privacy
 
-- Memories live at the path you choose. No telemetry. No tracking.
-- Pro features call YOUR Anthropic/OpenAI API directly from your machine. We never see prompts, responses, or content.
-- License check is one short request to our server once a day, cached locally — works offline most of the time.
-- Open source. Read the code. Fork it. Self-host the license check if you don't trust us.
+- Local memories live at a path you choose. No telemetry.
+- `smart_extract` sends conversation chunks to our cloud, which proxies them to Anthropic. **Processed in-flight, never stored.** We log only metadata (timestamp, token count, success/fail).
+- Open source. Read the code. Audit the cloud worker spec at `cloud/SPEC.md`.
 
 ## Install
 
-### One command (auto-detects your AI clients)
+### Auto (recommended)
 ```bash
 npx @snapcommit/install
 ```
 
-### Manual install (any MCP client)
+Detects and configures Claude Code, Cursor, Claude Desktop, Cline, Windsurf, VS Code.
+
+### Manual (any MCP client)
 
 **Claude Code:**
 ```bash
 claude mcp add snapcommit -- npx -y @snapcommit/mcp
 ```
 
-**Cursor / Claude Desktop / Continue / Cline / Windsurf / Codex CLI / Gemini CLI / Zed / others:**
+**Cursor / Claude Desktop / others:**
 ```json
 {
   "mcpServers": {
@@ -138,53 +104,12 @@ claude mcp add snapcommit -- npx -y @snapcommit/mcp
 }
 ```
 
-## Cross-device & team sharing
+## Sign up for higher tiers
 
-### Across your own devices (single user)
-
-Put the file in any cloud-synced folder. On Mac:
-```
-~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db
-```
-On Windows:
-```
-%USERPROFILE%\OneDrive\snapcommit\memories.db
-```
-On Linux:
-```
-~/Dropbox/snapcommit/memories.db
-```
-
-Set the path via your AI:
-> "Move Snapcommit storage to ~/Dropbox/snapcommit/memories.db"
-
-Or via env var:
-```bash
-export SNAPCOMMIT_STORAGE="$HOME/Dropbox/snapcommit/memories.db"
-```
-
-Install Snapcommit on your other devices with the same env var or storage-path config. Done.
-
-### Sharing with a team
-
-1. Pick a shared cloud folder (Dropbox shared, Google Drive shared, iCloud Shared, etc.)
-2. All teammates set their `SNAPCOMMIT_STORAGE` to the same path
-3. Memories saved by one teammate become visible to others when the cloud provider syncs
-
-**Note on concurrent writes**: SQLite over cloud-synced folders works for single-user-multi-device perfectly. For teams writing simultaneously, occasional conflicts can happen — your cloud provider's conflict-file resolution handles it. Pro tier's conflict detection helps surface these.
-
-## Pro setup (~2 minutes)
-
-1. Buy Pro at https://snapcommit.com/pro (Dodo Payments, $99 one-time, includes tax)
-2. Get license key via email
-3. Add your AI provider key (Anthropic or OpenAI):
-   > "Set my Anthropic API key to sk-ant-..."
-4. Activate license:
-   > "Activate Snapcommit license LICENSE-KEY-HERE"
-5. Use Pro features:
-   > "Extract memories from this session: [paste your conversation]"
-
-Your API key and license live at `~/.snapcommit-mcp/config.json` with `chmod 600`. Neither leaves your machine.
+1. Visit https://snapcommit.com/signup
+2. Get your API token by email
+3. In your AI tool: *"Sign in to Snapcommit with token sct_live_..."*
+4. Use Pro features: *"Smart-extract memories from this conversation summary..."*
 
 ## Development
 
@@ -202,9 +127,11 @@ cd dashboard && npm install && npm run dev
 # → http://localhost:4000
 ```
 
-## Why "Snapcommit"
-
-You snap a moment from your conversation. Commit it to memory. Recall it anywhere. Like git, but for AI context.
+Cloud worker (Cloudflare Worker + D1):
+```bash
+cd cloud
+# See cloud/SPEC.md for endpoint contracts and deploy instructions
+```
 
 ## License
 
