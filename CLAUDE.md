@@ -10,32 +10,42 @@ These rules are non-negotiable. Every decision passes through them.
 
 If a feature doesn't make the markdown-context workaround look primitive in comparison, it's not in v1. The bar is "10x better than maintaining your own .md file," not "slightly better."
 
-## The architecture principle (locked Nov 2026)
+## The architecture principle (locked May 2026)
 
-**We are a tool enabler, not a database.**
+**We are a tool enabler, not a database. We don't even pick the sync protocol.**
 
-Memories live in two places and we own neither:
-1. **Local SQLite** on the user's machine (working memory, fast, default)
-2. **The user's own Notion workspace** (optional, opt-in, their sync + share layer)
+The memory file is a single SQLite or JSON file at a path the user controls. The user puts that file wherever they want it synced:
 
-We do NOT run cloud infrastructure to store user data. Ever. This kills an entire category of cost, complexity, and trust problems in one move:
+| User wants | They put the file in | Result |
+|---|---|---|
+| Single-device, offline | `~/.snapcommit-mcp/memories.db` (default) | Fast, private, no sync |
+| Sync across own devices | `~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db` | iCloud auto-syncs to all their Apple devices |
+| Cross-platform sync | `~/Dropbox/snapcommit/memories.db` (or OneDrive, Google Drive) | Their existing cloud sync handles it |
+| Share with team | Any shared cloud folder (Dropbox shared, iCloud Shared, Google Drive shared) | Permissions handled by the cloud provider |
+| Version history | A folder backed by git, or `~/Library/CloudStorage/Dropbox/snapcommit/` with Dropbox file history | Free time-travel via the provider |
+| Notion-as-UI for browsing | Optional snapcommit_notion_setup adapter (one-way mirror) | Power-user feature, not required |
 
-- No cloud sync infrastructure to build
-- No Stripe to charge for storage
-- No backups to manage
-- No security audits / SOC2 / GDPR theater required
-- No vendor lock-in concern for users (their data is in their Notion)
-- No data breach risk on our side
-- Notion already solves: cross-device sync, sharing with teammates, native mobile editing, search, history
+**We do not build sync. We do not build sharing. We do not build a cloud.** The user's existing cloud provider (which they already pay for and trust) handles all of it. Our job is to write to the file path they give us.
 
-The Plaid/Stripe pattern: we are the wire between the AI tool and the user's own storage. The user picks the storage.
+This kills, completely:
+- Cloud sync infrastructure to build
+- User accounts, login flows, password resets
+- Storage costs that scale with users
+- Backups to manage
+- Security audits / SOC2 / GDPR theater
+- Cross-device conflict resolution (cloud provider handles it)
+- Team permission UI (cloud provider handles it)
+- Vendor lock-in concern (data is just a file, user owns it)
 
-What this means concretely:
-- Storage, sync, sharing, backup, mobile = always free (user provides via Notion)
-- **Revenue model**: Snapcommit Pro charges for AI-powered features the free tier can't do
-- Sharing = "share your Notion database with your teammate" (Notion already does this perfectly)
-- Cross-device = "log into Notion from your laptop and phone" (already solved)
-- Backup = "your Notion workspace is the backup"
+The Plaid pattern, taken further: we are not even an opinionated wire. The user picks the wire.
+
+## What the user does
+
+- **Single device**: nothing. Defaults work.
+- **New device**: install Snapcommit, set `SNAPCOMMIT_STORAGE` env var to the cloud-folder path, done.
+- **Team sharing**: put the file in a shared cloud folder, teammates set the same path. Done.
+- **Backup**: their cloud provider auto-backs it up.
+- **Privacy**: nothing leaves their machine unless they put it in cloud storage themselves.
 
 ## Pricing (locked)
 
@@ -50,34 +60,35 @@ What this means concretely:
 - Keyword/FTS5 search
 - Regex-based extraction
 
-**Snapcommit Pro — $9/mo**:
-- **Smart AI extraction** — uses Claude/GPT to extract decisions, rejections, preferences with high accuracy (vs free tier's regex heuristics)
+**Snapcommit Pro — $99 one-time (lifetime) via Dodo Payments**:
+- **Smart AI extraction** — uses the user's own Anthropic/OpenAI API key (BYOK) to extract decisions, rejections, preferences with high accuracy. We never see their content.
 - **Semantic search** — find memories by meaning, not just keywords
-- **Auto-deduplication** — merges "use SQLite" saved 3 times into one memory
-- **Memory consolidation** — periodically condenses related memories into summaries
-- **Conflict detection** — alerts when a new memory contradicts an old one
+- **Auto-deduplication** — merges duplicates
+- **Memory consolidation** — condenses related memories into summaries
+- **Conflict detection** — alerts when new memory contradicts old one
+- **Multi-device awareness** — shows last-write device, surfaces conflicts
 - **Advanced project routing** — LLM-disambiguated, not just git remote
 
-**Lifetime backer — $149 one-time**:
-- All Pro features, forever
-- Founder badge
-- Early adopters tier, capped at 500 buyers
-- Generates cash upfront for development
+**Snapcommit Pro Yearly — $19/year** (for users who want a cheaper entry):
+- Same Pro features, recurring instead of lifetime
 
 **What we DON'T charge for**:
-- Storage (Notion does it free)
-- Sync (Notion does it free)
-- Sharing (Notion does it free)
-- Team plans (don't exist — Notion handles team sharing)
-- Memory count limits (arbitrary, feels punitive)
-- "Premium" support (just answer GitHub issues like a human)
+- Storage (it's a file the user owns)
+- Sync (user's cloud provider does it)
+- Sharing (user's cloud provider does it)
+- Team plans (don't exist — shared cloud folders are the team feature)
+- Memory count limits (feels punitive, kills adoption)
+- API inference costs (BYOK — user pays their own provider)
+- Server-hosted dashboards beyond the local one (run yourself or pay your own host)
 
-**Why this works**:
-- Pro features cost ~$0.70/user/month to serve (API + Stripe + hosting)
-- 92% margin at $9/mo
-- 11K paying users = $100K MRR (1% of plausibly addressable AI power user base)
-- All Pro features are stateless API calls — no database to maintain
-- Free tier is genuinely useful, not crippled
+**Why this works (autopilot math)**:
+- Dodo Payments is merchant of record — handles US/EU/UK/CA/AU sales tax and VAT
+- BYOK = $0 API cost to us (user uses their own Anthropic/OpenAI key)
+- License key check is ~50 lines on Cloudflare Workers free tier (covers 100K+ daily checks)
+- Per-sale cost: ~$5 (Dodo fee + payment processor). Net ~$94 per lifetime sale. 95% margin.
+- To hit ~$100K/month average: ~12K lifetime sales/year, or 7K Pro Yearly subs at $19, or any mix
+- All Pro features run client-side using user's API key → zero infra burden per user
+- Free tier is genuinely useful (full local memory, all CRUD, MCP, Notion adapter), not crippled
 
 ## Hard constraints
 

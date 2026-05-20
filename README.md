@@ -1,89 +1,132 @@
 # Snapcommit
 
-**Local-first memory for your AI tools. Sync to your own Notion.**
-
-One MCP server. Memory across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf + 25 more clients. Your data lives on your machine. Optionally synced to your own Notion workspace for cross-device access and team sharing.
-
-We are not a database. The user's Notion workspace is.
+**The memory layer for your AI tools.** One MCP server. Works across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf, Codex CLI, Gemini CLI + 22 more clients. Your memories live in a file you own. Sync however you want.
 
 ```bash
 npx @snapcommit/install
 ```
 
-That's it. Snapcommit detects your AI tools, wires itself into each, and now they remember across every session.
+That's it. We detect every MCP-capable AI tool on your machine and wire Snapcommit into each. Your AI now remembers across every session and every tool.
 
 ## Why
 
-You re-explain your project to every new AI session. You re-state preferences. You re-paste context from one tool to another. Reddit's #1 dev complaint about AI tools is "they never remember me." 91 hours/year wasted per solo founder.
+Reddit's #1 complaint about AI tools is "they never remember me." 91 hours/year wasted re-explaining context per solo founder.
 
 Existing fixes are bad:
-- **OpenMemory** claims "local-first" but ships your data to Mem0's cloud
-- **Supermemory** is server-side, $19/mo
-- **Mem AI** burned $40M trying to be the database
+- **OpenMemory** claims local-first but ships your data to Mem0's cloud
+- **Supermemory** is server-side, $19/mo subscription
+- **Mem AI** burned $40M trying to be the database, now pivoting
 - **Markdown files** go stale, don't sync, live in 4 different formats per tool
 
-Snapcommit is **genuinely** local-first. Memories live in a SQLite file on your machine at `~/.snapcommit-mcp/memories.db`. If you want cross-device sync or to share with a teammate, you connect your own Notion workspace and we mirror to it. We host nothing.
+Snapcommit is **genuinely** local-first. Your memories live in a single file on your machine that you own. If you want cross-device sync or team sharing, you put that file in a cloud folder you already use — iCloud, Dropbox, OneDrive, Google Drive, whatever. We host nothing. We're the wire, not the warehouse.
+
+## How sync works (it's already solved)
+
+| You want | You do | Result |
+|---|---|---|
+| Single device, offline | Nothing. Defaults work. | Fast, private, no internet needed |
+| Sync across your own devices | Put the file in iCloud / Dropbox / OneDrive | Your existing cloud provider auto-syncs |
+| Share with a teammate | Put the file in a shared cloud folder | Notion-grade sharing for free, no logins, no UI |
+| New laptop | Install Snapcommit, point at the same cloud-folder path | Memory carries over instantly |
+
+The setup command for cloud-syncing on Mac:
+> *In your AI: "Move Snapcommit storage to `~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db`"*
+
+That's the whole "cross-device sync feature." iCloud handles the rest.
 
 ## What it does
 
-The MCP server exposes 11 tools your AI calls automatically:
+13 MCP tools your AI calls automatically:
 
-### Memory (local SQLite, always-on)
-
-| Tool | When |
-|------|------|
-| `save_memory` | When something is worth remembering: a decision, an approach tried and rejected (with reasons), a preference, a fact about the codebase, an open question |
-| `recall_memory` | At session start, or when past context is relevant |
-| `list_memories` | To browse without searching |
-| `list_projects` | To orient across projects |
-| `update_memory` | When a memory needs revision |
-| `delete_memory` | When wrong or obsolete |
-| `export_memories` | JSON or Markdown export (paste anywhere) |
-
-### Notion sync (optional, user's own workspace)
+### Memory (free, always-on, local)
 
 | Tool | When |
 |------|------|
-| `snapcommit_notion_setup` | One-time: paste token + parent page URL, we create a database |
-| `snapcommit_notion_sync` | Push local memories to your Notion (idempotent) |
-| `snapcommit_notion_status` | Check connection state |
-| `snapcommit_notion_pull` | Inspect Notion vs local counts |
+| `save_memory` | Decisions, things tried-and-rejected (with reasons), preferences, facts, open questions |
+| `recall_memory` | At session start or when past context matters |
+| `list_memories` | Browse without searching |
+| `list_projects` | Orient across projects |
+| `update_memory` / `delete_memory` | Revise or remove |
+| `export_memories` | JSON or Markdown, anywhere |
 
-**The differentiator**: Snapcommit captures *rejections*, not just decisions. Every other memory tool only stores final answers. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the same mistakes.
+### Storage + config
 
-## Notion setup (90 seconds)
+| Tool | When |
+|------|------|
+| `snapcommit_storage_info` | Show where memories live + sync suggestions |
+| `snapcommit_set_storage_path` | Point at a cloud-synced folder for device/team sync |
+| `snapcommit_set_api_key` | Bring your own Anthropic/OpenAI key for Pro features |
+| `snapcommit_status` | Overall state of the world |
 
-1. Go to [notion.so/profile/integrations](https://www.notion.so/profile/integrations)
-2. Click **+ New integration**, name it "Snapcommit", choose your workspace, save
-3. Copy the **Internal Integration Secret** (starts with `secret_` or `ntn_`)
-4. In Notion, create a page where you want your memory to live (e.g. "AI Memory"). Open it, click `···` → **Add connections** → pick **Snapcommit**.
-5. Copy the page URL.
-6. In your AI tool, run:
-   > "Set up Snapcommit Notion sync with token `secret_...` and parent page `https://www.notion.so/...`"
+### Snapcommit Pro ($99 lifetime via Dodo Payments)
 
-That's it. A "Snapcommit Memory" database appears in your page. Your AI starts saving there too.
+| Tool | What it does |
+|------|------|
+| `snapcommit_smart_extract` | LLM-based memory extraction from conversation. Uses YOUR API key (BYOK). Higher quality than the free tier's keyword capture. |
+| `snapcommit_activate_license` | Activate Pro with your license key |
+| `snapcommit_license_status` | Check tier |
 
-**Your token never leaves your machine.** Stored at `~/.snapcommit-mcp/notion.json` with `chmod 600`.
+### Notion sync (optional advanced adapter)
 
-## What you get from Notion sync
+| Tool | When |
+|------|------|
+| `snapcommit_notion_setup` | Mirror memories to a Notion database in your own workspace, for browsing in Notion's UI |
+| `snapcommit_notion_sync` | Push local → Notion |
+| `snapcommit_notion_status` | Check connection |
 
-- **Cross-device** — log into Notion on any device, your memory's there
-- **Sharing** — share the database with teammates the normal Notion way
-- **Native editing** — fix typos, add tags, link memories in Notion's UI
-- **Backup** — your memories are in your own workspace, not ours
-- **Mobile access** — Notion's mobile app works
+**The killer feature**: Snapcommit captures *rejections* with reasons, not just final decisions. Every other memory tool only stores what you ended up doing. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the same mistakes.
 
-## Manual MCP install
+## Pricing
 
-If `npx @snapcommit/install` doesn't auto-detect your client, add to your MCP config:
+**Free tier (forever, MIT)**
+- All 7 local memory tools
+- Storage in a file you own (anywhere you want it)
+- Notion sync adapter
+- Auto-installer for 30+ MCP clients
+- Web dashboard
+- Keyword search
+
+**Snapcommit Pro — $99 one-time via Dodo Payments**
+- Smart LLM extraction (uses YOUR Anthropic/OpenAI key — we never see your data)
+- Semantic search (find by meaning, not just keywords)
+- Auto-deduplication
+- Memory consolidation
+- Conflict detection across devices
+- All updates, forever
+
+**Snapcommit Pro Yearly — $19/year** (cheaper upfront)
+- Same Pro features, recurring
+
+**What we never charge for**
+- Storage (the file lives on your machine or your cloud)
+- Sync (your cloud provider does it)
+- Sharing (your cloud provider does it)
+- Memory count (no arbitrary limits)
+- API costs (Pro is BYOK — you use your own provider)
+- Team plans (don't exist — shared folders are the team feature)
+
+## Privacy
+
+- Memories live at the path you choose. No telemetry. No tracking.
+- Pro features call YOUR Anthropic/OpenAI API directly from your machine. We never see prompts, responses, or content.
+- License check is one short request to our server once a day, cached locally — works offline most of the time.
+- Open source. Read the code. Fork it. Self-host the license check if you don't trust us.
+
+## Install
+
+### One command (auto-detects your AI clients)
+```bash
+npx @snapcommit/install
+```
+
+### Manual install (any MCP client)
 
 **Claude Code:**
 ```bash
 claude mcp add snapcommit -- npx -y @snapcommit/mcp
 ```
 
-**Cursor / Claude Desktop / Continue / Cline / Windsurf / VS Code:**
-
+**Cursor / Claude Desktop / Continue / Cline / Windsurf / Codex CLI / Gemini CLI / Zed / others:**
 ```json
 {
   "mcpServers": {
@@ -95,33 +138,53 @@ claude mcp add snapcommit -- npx -y @snapcommit/mcp
 }
 ```
 
-## Pricing
+## Cross-device & team sharing
 
-**Free tier (forever, MIT open source):**
-- Local SQLite memory storage
-- All MCP tools (save, recall, list, export, update, delete)
-- Notion sync (your own workspace)
-- Keyword search
-- Web dashboard
-- Auto-installer for 30+ MCP clients
+### Across your own devices (single user)
 
-**Snapcommit Pro — $9/mo:**
-- **Smart AI extraction** — Claude/GPT writes better memories than regex can
-- **Semantic search** — find memories by meaning, not just keywords
-- **Auto-deduplication** — never save the same fact twice
-- **Memory consolidation** — old related memories collapse into summaries
-- **Conflict detection** — alerts when new memory contradicts an old one
+Put the file in any cloud-synced folder. On Mac:
+```
+~/Library/CloudStorage/iCloud Drive/snapcommit/memories.db
+```
+On Windows:
+```
+%USERPROFILE%\OneDrive\snapcommit\memories.db
+```
+On Linux:
+```
+~/Dropbox/snapcommit/memories.db
+```
 
-**Lifetime — $149 one-time** (first 500 backers only): all Pro features forever, founder badge.
+Set the path via your AI:
+> "Move Snapcommit storage to ~/Dropbox/snapcommit/memories.db"
 
-**Storage stays free, always.** We don't host your data. Notion does (your own workspace). We charge only for AI features Notion can't do.
+Or via env var:
+```bash
+export SNAPCOMMIT_STORAGE="$HOME/Dropbox/snapcommit/memories.db"
+```
 
-## Privacy
+Install Snapcommit on your other devices with the same env var or storage-path config. Done.
 
-- Data lives in `~/.snapcommit-mcp/memories.db` on your machine. Nowhere else by default.
-- Notion sync is opt-in. When you opt in, data syncs to **your own Notion workspace**, not ours.
-- No telemetry. We don't even know you exist.
-- Open source — read the code, fork it, self-host it.
+### Sharing with a team
+
+1. Pick a shared cloud folder (Dropbox shared, Google Drive shared, iCloud Shared, etc.)
+2. All teammates set their `SNAPCOMMIT_STORAGE` to the same path
+3. Memories saved by one teammate become visible to others when the cloud provider syncs
+
+**Note on concurrent writes**: SQLite over cloud-synced folders works for single-user-multi-device perfectly. For teams writing simultaneously, occasional conflicts can happen — your cloud provider's conflict-file resolution handles it. Pro tier's conflict detection helps surface these.
+
+## Pro setup (~2 minutes)
+
+1. Buy Pro at https://snapcommit.com/pro (Dodo Payments, $99 one-time, includes tax)
+2. Get license key via email
+3. Add your AI provider key (Anthropic or OpenAI):
+   > "Set my Anthropic API key to sk-ant-..."
+4. Activate license:
+   > "Activate Snapcommit license LICENSE-KEY-HERE"
+5. Use Pro features:
+   > "Extract memories from this session: [paste your conversation]"
+
+Your API key and license live at `~/.snapcommit-mcp/config.json` with `chmod 600`. Neither leaves your machine.
 
 ## Development
 
@@ -135,15 +198,13 @@ npm run build
 
 Dashboard:
 ```bash
-cd dashboard
-npm install
-npm run dev
-# http://localhost:4000
+cd dashboard && npm install && npm run dev
+# → http://localhost:4000
 ```
 
 ## Why "Snapcommit"
 
-You snap a moment from your conversation. Commit it to memory. Recall it anywhere. Like git, but for AI context. The mental model is intentionally familiar to developers.
+You snap a moment from your conversation. Commit it to memory. Recall it anywhere. Like git, but for AI context.
 
 ## License
 

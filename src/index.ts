@@ -21,6 +21,20 @@ import {
   notionStatus,
   notionPull,
 } from "./tools/notion.js";
+import {
+  storageInfo,
+  setStoragePath,
+  setStoragePathSchema,
+  setApiKey,
+  setApiKeySchema,
+  status,
+} from "./tools/storage.js";
+import { smartExtract, smartExtractSchema } from "./tools/extract.js";
+import {
+  activateLicense,
+  activateLicenseSchema,
+  licenseStatus,
+} from "./tools/license.js";
 
 async function main(): Promise<void> {
   const store = new MemoryStore();
@@ -80,7 +94,70 @@ async function main(): Promise<void> {
   );
 
   // ──────────────────────────────────────────────────────────────────────
-  // Notion sync — optional. We are not a database. The user's Notion is.
+  // Storage + config — primary way to set up sync across devices and teams
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_storage_info",
+    "Show where Snapcommit's memory file lives and how to sync it across devices or share with a team. Suggests cloud-folder paths (iCloud, Dropbox, OneDrive, etc.) for the user's OS.",
+    {},
+    storageInfo(),
+  );
+
+  server.tool(
+    "snapcommit_set_storage_path",
+    "Move Snapcommit's memory file to a new path — e.g., a cloud-synced folder like iCloud Drive or Dropbox. To sync across the user's own devices, point at a folder their cloud provider syncs. To share with a team, point at a shared cloud folder. We never sync the file ourselves.",
+    setStoragePathSchema,
+    setStoragePath(),
+  );
+
+  server.tool(
+    "snapcommit_set_api_key",
+    "Store the user's own Anthropic or OpenAI API key locally for Pro features (BYOK — Bring Your Own Key). The key never leaves their machine.",
+    setApiKeySchema,
+    setApiKey(),
+  );
+
+  server.tool(
+    "snapcommit_status",
+    "Show overall Snapcommit state: storage path, license tier, API key status, preferred provider.",
+    {},
+    status(),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Pro: smart_extract (BYOK)
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_smart_extract",
+    "Pro feature: extract structured memories (decisions, rejections, preferences, facts, open questions) from a conversation summary using the user's own LLM API key. Higher quality than the free tier's keyword-based capture. Requires Pro license + a configured API key.",
+    smartExtractSchema,
+    smartExtract(store),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // License management (Dodo Payments)
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_activate_license",
+    "Activate a Snapcommit Pro license. Verify a key purchased via Dodo Payments and unlock Pro features. The key is stored locally; verification happens online once and is cached.",
+    activateLicenseSchema,
+    activateLicense(),
+  );
+
+  server.tool(
+    "snapcommit_license_status",
+    "Show current license tier and last verification timestamp.",
+    {},
+    licenseStatus(),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Notion sync — optional adapter. The user's Notion is one of many places
+  // the storage file CAN live; this tool is for users who want a Notion DB
+  // mirror in addition to (or instead of) plain file storage.
   // ──────────────────────────────────────────────────────────────────────
 
   server.tool(

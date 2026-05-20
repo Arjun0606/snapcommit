@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { resolveStoragePath } from "./config.js";
 
 export interface Memory {
   id: number;
@@ -21,9 +21,9 @@ export interface NewMemory {
 }
 
 function dbPath(): string {
-  const dir = join(homedir(), ".snapcommit-mcp");
-  mkdirSync(dir, { recursive: true });
-  return join(dir, "memories.db");
+  const path = resolveStoragePath();
+  mkdirSync(dirname(path), { recursive: true });
+  return path;
 }
 
 export class MemoryStore {
