@@ -65,14 +65,14 @@ export function login() {
       // Allow saving even when offline so the user can try again later
       writeConfig({
         apiToken: args.token,
-        tier: "free",
-        monthlyQuota: TIER_QUOTAS.free,
+        tier: "inactive",
+        monthlyQuota: 0,
       });
       return {
         content: [
           {
             type: "text" as const,
-            text: `Token saved locally, but couldn't verify with the server (${info.error}). Free-tier limits will apply until verification succeeds. Try snapcommit_account_status when you're online.`,
+            text: `Token saved locally, but couldn't verify with the server (${info.error}). Smart extraction will stay disabled until verification succeeds. Try snapcommit_account_status when you're online.`,
           },
         ],
       };
@@ -95,9 +95,9 @@ export function login() {
             `Monthly quota: ${info.monthly_quota} smart-extraction calls`,
             `Used so far: ${info.used_this_month}`,
             ``,
-            info.tier === "free"
-              ? `Upgrade at https://snapcommit.com/pricing for higher limits.`
-              : `Manage your subscription at https://snapcommit.com/account.`,
+            info.tier === "inactive"
+              ? `Subscription inactive. Reactivate at https://snapcommit.com/pricing`
+              : `Manage your subscription with snapcommit_open_billing.`,
           ].join("\n"),
         },
       ],
@@ -118,9 +118,12 @@ export function accountStatus() {
           {
             type: "text" as const,
             text: [
-              "Not signed in. You're on the Free tier with 5 smart-extraction calls / month and full local memory features.",
+              "No Snapcommit cloud account on this machine.",
               "",
-              "Sign up at https://snapcommit.com/signup, then run snapcommit_login with your token.",
+              "Local memory works fully without an account — save, recall, list, projects, exports, Notion adapter, cloud presets are all free open source.",
+              "",
+              "To unlock AI-powered extraction (snapcommit_smart_extract), subscribe at https://snapcommit.com/pricing — Hobby $9/mo, Pro $29/mo, or Studio $129/mo.",
+              "Try the live demo at https://snapcommit.com first to see what it does.",
             ].join("\n"),
           },
         ],
@@ -135,8 +138,8 @@ export function accountStatus() {
             type: "text" as const,
             text: [
               `Couldn't reach Snapcommit cloud (${info.error}).`,
-              `Cached tier: ${cfg.tier ?? "free"}`,
-              `Cached quota: ${cfg.monthlyQuota ?? TIER_QUOTAS.free} / month`,
+              `Cached tier: ${cfg.tier ?? "inactive"}`,
+              `Cached quota: ${cfg.monthlyQuota ?? TIER_QUOTAS.inactive} / month`,
               `Last verified: ${cfg.tierVerifiedAt ?? "never"}`,
             ].join("\n"),
           },
@@ -151,6 +154,23 @@ export function accountStatus() {
       monthlyQuota: info.monthly_quota,
       tierVerifiedAt: new Date().toISOString(),
     });
+
+    if (info.tier === "inactive") {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              `Signed in${info.email ? ` as ${info.email}` : ""}`,
+              `Tier: inactive (no active subscription)`,
+              ``,
+              `Smart extraction is paused until you reactivate. Local memory still works fully.`,
+              `Reactivate or pick a plan at https://snapcommit.com/pricing`,
+            ].join("\n"),
+          },
+        ],
+      };
+    }
 
     const next = nextTier(info.tier);
     const pct = info.used_this_month / info.monthly_quota;

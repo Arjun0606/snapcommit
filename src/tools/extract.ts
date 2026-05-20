@@ -131,9 +131,12 @@ export function smartExtract(store: MemoryStore, getAgentName: () => string | nu
           {
             type: "text" as const,
             text: [
-              "Not signed in. smart_extract uses Snapcommit's cloud for AI extraction (we never store your content — it's processed in-flight only).",
+              "smart_extract requires a Snapcommit subscription. (Local memory is always free without an account.)",
               "",
-              "Get a free account at https://snapcommit.com/signup (5 extractions/month free), then run snapcommit_login with your token.",
+              "  • See what it does (no signup): https://snapcommit.com — paste sample text into the live demo",
+              "  • Subscribe: https://snapcommit.com/pricing",
+              "    Hobby $9/mo (200 calls) · Pro $29/mo (2000 calls) · Studio $129/mo (10000 calls)",
+              "  • Already paid? Run snapcommit_login with the token from your email.",
             ].join("\n"),
           },
         ],

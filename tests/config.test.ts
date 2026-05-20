@@ -50,6 +50,13 @@ describe("config", () => {
     expect(after.tier).toBe("hobby");
   });
 
+  it("'free' tier no longer exists; 'inactive' is the no-subscription state", () => {
+    // Free tier removed in v0.9 — paid-only model
+    expect("free" in TIER_QUOTAS).toBe(false);
+    expect("inactive" in TIER_QUOTAS).toBe(true);
+    expect(TIER_QUOTAS.inactive).toBe(0);
+  });
+
   it("resolveStoragePath honors SNAPCOMMIT_STORAGE env var", () => {
     process.env.SNAPCOMMIT_STORAGE = "/tmp/override.db";
     expect(resolveStoragePath()).toBe("/tmp/override.db");
@@ -70,22 +77,22 @@ describe("config", () => {
     expect(isAuthenticated()).toBe(true);
   });
 
-  it("currentTier defaults to free when not set", () => {
-    expect(currentTier()).toBe("free");
+  it("currentTier defaults to inactive when not set", () => {
+    expect(currentTier()).toBe("inactive");
     writeConfig({ tier: "studio" });
     expect(currentTier()).toBe("studio");
   });
 
   it("currentQuota uses stored value or falls back to tier default", () => {
-    expect(currentQuota()).toBe(TIER_QUOTAS.free);
+    expect(currentQuota()).toBe(TIER_QUOTAS.inactive);
     writeConfig({ tier: "hobby" });
     expect(currentQuota()).toBe(TIER_QUOTAS.hobby);
     writeConfig({ monthlyQuota: 9999 });
     expect(currentQuota()).toBe(9999);
   });
 
-  it("TIER_QUOTAS has correct tier values (free is now 3 lifetime)", () => {
-    expect(TIER_QUOTAS.free).toBe(3);
+  it("TIER_QUOTAS has correct values for paid tiers + zero for inactive", () => {
+    expect(TIER_QUOTAS.inactive).toBe(0);
     expect(TIER_QUOTAS.hobby).toBe(200);
     expect(TIER_QUOTAS.pro).toBe(2000);
     expect(TIER_QUOTAS.studio).toBe(10000);

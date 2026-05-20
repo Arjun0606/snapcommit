@@ -60,22 +60,21 @@ The Plaid pattern, taken further: we are not even an opinionated wire. The user 
 - Keyword/FTS5 search
 - Regex-based extraction
 
-**Tiered SaaS via Dodo Payments. We provide the AI compute. We never store content.**
+**Tiered paid SaaS via Dodo Payments. We provide the AI compute. We never store content.**
 
 Architecture:
 - User content lives in user's file (local + their cloud folder)
-- When user invokes a Pro feature, the local MCP server POSTs to our API
-- Our API proxies to OpenAI/Anthropic using OUR key, counts usage, returns
+- When user invokes a paid feature, the local MCP server POSTs to our Supabase Edge Function
+- Our Edge Function proxies to OpenAI/Anthropic using OUR key, counts usage, returns
 - Content is processed in-flight, never persisted server-side
 - Only metadata logged (user_id, timestamp, model, token count, success) — never prompts or content
 
-**Free** — $0/mo
-- All local memory tools (save/recall/list/projects/update/delete/export)
-- File-based storage in user's chosen path (local or cloud folder)
-- Notion adapter
-- All 30+ MCP clients supported
-- **5 smart-extraction calls/month** (taste of Pro)
-- Keyword search
+**There is no cloud-account free tier.** The "free product" is the open-source MCP server itself — local memory tools work without an account, forever, MIT-licensed.
+
+**Live demo on the landing page** lets people try smart_extract without signing up:
+- 3 demo extractions per IP per UTC day (rate-limited in the demo-extract Edge Function)
+- Content capped at 4,000 chars
+- No account creation. They subscribe directly when ready.
 
 **Hobby** — $9/mo
 - Everything in Free

@@ -13,7 +13,15 @@ import { homedir, hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 
-export type Tier = "free" | "hobby" | "pro" | "studio";
+/**
+ * Account subscription states:
+ *   - hobby / pro / studio: active paid subscription
+ *   - inactive: account exists but no active subscription (lapsed, canceled, or never paid)
+ *
+ * Users without any cloud account at all have no tier — they use the
+ * open-source local MCP for free, with no smart_extract access.
+ */
+export type Tier = "hobby" | "pro" | "studio" | "inactive";
 
 export interface UserConfig {
   /** Where memories.db lives. Defaults to ~/.snapcommit-mcp/memories.db. */
@@ -32,36 +40,25 @@ export interface UserConfig {
   deviceLabel?: string;
 }
 
-/**
- * Quota by tier — for offline display. Server is source of truth.
- * Free is LIFETIME, not monthly — prevents account-cycling abuse.
- */
+/** Quota by tier — for offline display. Server is source of truth. */
 export const TIER_QUOTAS: Record<Tier, number> = {
-  free: 3,       // LIFETIME — 3 calls to evaluate, then upgrade
-  hobby: 200,    // monthly
-  pro: 2000,     // monthly
-  studio: 10000, // monthly
+  inactive: 0,
+  hobby: 200,
+  pro: 2000,
+  studio: 10000,
 };
 
-/** Whether a tier's quota resets monthly. Free is one-shot lifetime. */
-export const TIER_RESETS_MONTHLY: Record<Tier, boolean> = {
-  free: false,
-  hobby: true,
-  pro: true,
-  studio: true,
-};
-
-/** Price per month in USD by tier — for offline display. Server is source of truth. */
+/** Price per month in USD by tier. */
 export const TIER_PRICES: Record<Tier, number> = {
-  free: 0,
+  inactive: 0,
   hobby: 9,
   pro: 29,
   studio: 129,
 };
 
-/** Suggest the next tier up from the current one. */
+/** Suggest the next tier up. From inactive, the entry tier is hobby. */
 export function nextTier(current: Tier): Tier | null {
-  const order: Tier[] = ["free", "hobby", "pro", "studio"];
+  const order: Tier[] = ["inactive", "hobby", "pro", "studio"];
   const idx = order.indexOf(current);
   return idx < 0 || idx === order.length - 1 ? null : order[idx + 1];
 }
@@ -142,7 +139,7 @@ export function ensureDevice(): { id: string; label: string } {
 
 export function currentTier(): Tier {
   const cfg = readConfig();
-  return cfg.tier ?? "free";
+  return cfg.tier ?? "inactive";
 }
 
 export function currentQuota(): number {

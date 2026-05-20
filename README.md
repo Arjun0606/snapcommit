@@ -25,16 +25,19 @@ Snapcommit is different:
 
 ## Pricing
 
-| Tier | Price | Smart-extractions / month | Other |
-|---|---|---|---|
-| **Free** | $0 | 5 | All local memory features, all 30+ MCP clients, Notion adapter, dashboard |
-| **Hobby** | **$9/mo** | 200 | + semantic search, auto-dedup |
-| **Pro** | **$29/mo** | 2,000 | + memory consolidation, conflict detection, priority support |
-| **Studio** | **$129/mo** | 10,000 | + custom prompts, premium-model option, early access |
+**Local memory is free open source (MIT).** Storage, sync, sharing, all 22 MCP tools — free forever, no account needed. The paid tiers unlock LLM-powered extraction running through our cloud.
+
+| Tier | Price | Smart-extractions / month |
+|---|---|---|
+| **Hobby** | **$9/mo** | 200 + semantic search + auto-dedup |
+| **Pro** | **$29/mo** | 2,000 + memory consolidation + conflict detection |
+| **Studio** | **$129/mo** | 10,000 + custom prompts + premium-model option |
+
+**Try it free** — paste any conversation into the live demo at [snapcommit.com](https://snapcommit.com) (3 demo extractions per IP per day, no signup). See what your AI will save before you subscribe.
 
 All paid tiers handled by [Dodo Payments](https://dodopayments.com) — merchant of record, tax included worldwide. Cancel anytime. Automated dunning + reminder emails on failed payments.
 
-**Smart-extractions run on GPT-5 Nano** (best structured-output quality/cost in 2026), with Gemini 2.5 Flash failover. Studio users can opt into Claude Haiku 4.5 for higher quality on demand. Your conversations are processed in-flight and never stored on our servers.
+**Smart-extractions run on GPT-5 Nano** (best structured-output quality/cost in 2026), with Gemini 2.5 Flash failover. Studio users can opt into Claude Haiku 4.5 for higher quality. Your conversations are processed in-flight and never stored on our servers.
 
 **What we never charge for:** storage, sync, sharing, memory count, devices, team size, the MCP server itself.
 

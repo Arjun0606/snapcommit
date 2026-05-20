@@ -1,216 +1,161 @@
-# Snapcommit Cloud — API Spec
+# Snapcommit Cloud — API Spec (Supabase edition)
 
-The cloud is a thin gateway. It:
+The cloud is one Supabase project. It provides:
 
-1. Authenticates users via API token
-2. Counts monthly extraction calls per user
-3. Proxies AI extraction to Anthropic/OpenAI using our own keys
-4. **Never stores user content** — request body is in-flight only
-5. Stores only metadata (user_id, timestamp, model, token count, success)
+1. **Auth** — Supabase Auth handles magic-link emails and session JWTs.
+2. **Database** — Postgres with RLS, holding accounts + tokens + usage.
+3. **Edge Functions** — Deno-based serverless endpoints.
+4. **Email** — Supabase's built-in Resend integration for auth emails.
 
-Designed for a single Cloudflare Worker + D1 database. Free tier covers tens of thousands of users.
+We never store user content. Edge Functions proxy extraction to GPT-5 Nano (failover: Gemini 2.5 Flash) using our keys.
+
+## Project structure
+
+```
+cloud/supabase/
+├── config.toml                    # Supabase project config
+├── migrations/
+│   └── 20260101000000_init.sql    # users, api_tokens, usage_monthly, extraction_log, demo_usage
+└── functions/
+    ├── _shared/
+    │   ├── auth.ts                # token verify, quota helpers, JSON helpers
+    │   └── extract.ts             # OpenAI/Gemini extraction
+    ├── extract/                   # POST /v1/extract (paid)
+    ├── demo-extract/              # POST /v1/demo-extract (anonymous, IP rate limited)
+    ├── account/                   # GET /v1/account
+    ├── portal/                    # POST /v1/portal (Dodo customer portal)
+    ├── delete-account/            # POST /v1/delete-account
+    └── dodo-webhook/              # POST /v1/dodo-webhook (subscription events)
+```
 
 ## Endpoints
 
-### `POST /v1/extract`
+### `POST /functions/v1/extract`
 
-Extract structured memories from a conversation chunk.
+Authenticated extraction. Requires active subscription (tier !== 'inactive') and remaining quota.
 
-**Headers**: `Authorization: Bearer <token>`
-
-**Body**:
-```json
-{ "content": "raw conversation text (max 8000 chars)" }
-```
+**Headers**: `Authorization: Bearer sct_live_xxx`
+**Body**: `{ "content": "...max 8000 chars..." }`
 
 **Response 200**:
 ```json
 {
-  "memories": [
-    {
-      "content": "Use SQLite over Postgres for local-first storage",
-      "kind": "decision",
-      "tags": ["storage", "architecture"]
-    }
-  ],
+  "memories": [{ "content": "...", "kind": "decision", "tags": ["..."] }],
   "usage": { "used_this_month": 47, "monthly_quota": 200 }
 }
 ```
 
+**Response 402**: `{ "error": "quota exceeded", "upgrade_url": "..." }` (also when `tier === 'inactive'`)
 **Response 401**: `{ "error": "invalid token" }`
-**Response 402 / 429**: `{ "error": "quota exceeded", "upgrade_url": "https://snapcommit.com/pricing" }`
 
-**Server logic**:
-1. Verify token → user row in D1
-2. Check `used_this_month < monthly_quota`. If exceeded → 402.
-3. Increment usage counter (atomic).
-4. POST to Anthropic Messages API with `claude-3-5-haiku-20241022` and our `ANTHROPIC_API_KEY`.
-5. Parse model output as JSON array. Discard everything else.
-6. Return memories + usage. **Never log the request body or response content.**
+### `POST /functions/v1/demo-extract`
 
-### `GET /v1/account`
+**Anonymous**. The "try it" widget on snapcommit.com. Rate limited to 3 calls per IP per UTC day. Caps content at 4,000 chars.
 
-Return tier, quota, and used count for the authenticated user.
+**Body**: `{ "content": "..." }`
+**Response 200**: `{ "memories": [...], "demo_remaining": 2 }`
+**Response 429**: `{ "error": "demo limit reached", "message": "Subscribe at..." }`
 
-**Headers**: `Authorization: Bearer <token>`
+### `GET /functions/v1/account`
 
-**Response 200**:
-```json
-{
-  "email": "user@example.com",
-  "tier": "pro",
-  "monthly_quota": 2000,
-  "used_this_month": 47
-}
-```
+Returns tier, quota, and current month's usage.
 
-### `POST /v1/auth/signup`
+**Headers**: `Authorization: Bearer sct_live_xxx`
+**Response 200**: `{ "email", "tier", "monthly_quota", "used_this_month" }`
 
-Create a new account. Generates API token, returns it once.
+### `POST /functions/v1/portal`
 
-**Body**:
-```json
-{ "email": "user@example.com" }
-```
+Returns a one-time Dodo customer portal URL.
 
-**Response 200**:
-```json
-{
-  "token": "sct_live_xxxxxxxxxxxxxxxx",
-  "tier": "free",
-  "monthly_quota": 5
-}
-```
+**Headers**: `Authorization: Bearer sct_live_xxx`
+**Response 200**: `{ "url": "https://billing.dodopayments.com/..." }`
 
-(In production, this is a magic-link email flow. For v0 we can ship a simple form on snapcommit.com.)
+### `POST /functions/v1/delete-account`
 
-### `POST /v1/account/portal`
+Two-step deletion.
 
-Generate a one-time URL to the user's Dodo customer portal. Hand to client; client opens in browser.
+**Headers**: `Authorization: Bearer sct_live_xxx`
+**Body**: `{ "confirm": false }` → sends confirmation email → `{ "state": "email_sent" }`
+**Body**: `{ "confirm": true }` (called from the email link after Supabase Auth verifies) → cancels Dodo subscription, deletes auth user (cascade removes profile, tokens, usage) → `{ "state": "deleted" }`
 
-**Headers**: `Authorization: Bearer <token>`
+### `POST /functions/v1/dodo-webhook`
 
-**Response 200**: `{ "url": "https://billing.dodopayments.com/portal/..." }`
-
-Worker logic: look up `dodo_customer_id` for the user, call Dodo's `portal/create-session` API, return the URL.
-
-### `POST /v1/account/delete`
-
-Start (or finalize) account deletion.
-
-**Headers**: `Authorization: Bearer <token>`
-
-**Body**: `{ "confirm": true }` or `{ "confirm": false }`
-
-If `confirm === false`: generate a JWT signed deletion-confirmation token, email it via Resend (link: `https://snapcommit.com/delete?token=...`), return `{ "state": "email_sent" }`.
-
-If `confirm === true` (called from the email confirmation page after JWT verify, OR with the magic phrase from MCP): cancel Dodo subscription, delete all user-scoped rows, return `{ "state": "deleted" }`.
-
-### Dodo Payments webhook
-
-Handles tier upgrades, cancellations, and payment failures (dunning).
-
-**`POST /v1/webhooks/dodo`** with HMAC-signed payload from Dodo.
-
-Events we handle:
+Verifies HMAC signature against `DODO_WEBHOOK_SECRET`, handles:
 
 | Event | Action |
 |-------|--------|
-| `subscription.created` | Upsert user row → set `tier` and `monthly_quota` |
-| `subscription.updated` | Update user's tier/quota if subscription tier changed |
-| `subscription.canceled` | At billing-period end: downgrade user to `free` tier |
-| `payment.failed` | Mark subscription as `past_due` (still active for grace period) |
-| `subscription.past_due` | Email user (via Resend) — payment failed, retrying |
-| `subscription.paused` | Downgrade to free immediately after final retry fails |
+| `subscription.created` | Create auth user (if missing), generate API token, email it |
+| `subscription.updated` | Update tier + quota |
+| `subscription.canceled` / `subscription.paused` | Set tier = inactive, quota = 0 |
 
-**Dodo handles its own dunning emails:**
-- Day -7 before renewal: reminder email (handled by Dodo)
-- Day 0: charge attempt
-- Days +3, +7, +14: automatic retry + reminder email (Dodo)
-- Day +21: subscription paused → webhook fires → we downgrade
+The auth user creation uses Supabase Auth's `generateLink('magiclink')` which sends an email through their managed Resend integration. The redirect lands on `snapcommit.com/auth/callback?token=sct_live_...` which surfaces the token to the user.
 
-We don't run our own cron. We don't send our own billing emails. Dodo's standard merchant-of-record flow covers it.
+## Onboarding flow (paid-only, demo-driven)
 
-### Upgrade nudge endpoint (optional)
+There is **no free tier in the cloud**. The free product is the open-source MCP server — local memory works without an account. The cloud is paid from the first call.
 
-**`POST /v1/nudge/dismiss`** — when user clicks "remind me later" on an upgrade prompt, store dismissal so we don't nag too often. Not v1 critical.
+1. User lands on snapcommit.com → uses the live demo (anonymous, 3 calls/day per IP).
+2. They click "Get Hobby" / "Pro" / "Studio" → Dodo Checkout (hosted by Dodo).
+3. Dodo collects payment + tax, fires `subscription.created` webhook.
+4. Worker creates Supabase Auth user, generates API token, sends magic-link email.
+5. User clicks email link → `snapcommit.com/auth/callback?token=sct_live_xxx` displays the token.
+6. User pastes into AI tool: *"Sign in to Snapcommit with token sct_live_xxx"*.
+7. `snapcommit_login` stores it locally. Account active. Memory + extraction work.
 
-## D1 schema
+## D1 → Postgres schema (new)
 
 ```sql
-CREATE TABLE users (
-  id TEXT PRIMARY KEY,           -- uuid
-  email TEXT NOT NULL UNIQUE,
-  token_hash TEXT NOT NULL,      -- bcrypt(api_token)
-  tier TEXT NOT NULL DEFAULT 'free',
-  monthly_quota INTEGER NOT NULL DEFAULT 5,
-  dodo_customer_id TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE usage_monthly (
-  user_id TEXT NOT NULL,
-  year_month TEXT NOT NULL,      -- e.g. '2026-05'
-  used INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (user_id, year_month)
-);
-
-CREATE TABLE extraction_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id TEXT NOT NULL,
-  ts TEXT NOT NULL DEFAULT (datetime('now')),
-  model TEXT NOT NULL,
-  input_tokens INTEGER,
-  output_tokens INTEGER,
-  ok INTEGER NOT NULL              -- 0 or 1
-);
+profiles      (id, email, tier, monthly_quota, dodo_customer_id, ...)
+api_tokens    (id, user_id, token_hash, token_prefix, created_at, revoked_at)
+usage_monthly (user_id, year_month, used)  -- atomic increment via RPC
+extraction_log (user_id, ts, model, input_tokens, output_tokens, ok)
+demo_usage    (ip, day, count)  -- per-IP anonymous demo rate limit
 ```
 
-**No table stores `content`. Ever.** Logs are metadata only.
+`extraction_log` and `usage_monthly` are aggregates only. No row contains user content.
 
-## Model strategy
+## Deploy (solo dev one-liner)
 
-| Role | Model | Pricing (May 2026) | Why |
-|------|-------|---------------------|-----|
-| Primary | **GPT-5 Nano** | ~$0.10/M in, $0.40/M out | Best structured-output quality at this price tier; OpenAI's response_format=json_object is reliable |
-| Failover | **Gemini 2.5 Flash** | ~$0.075/M in, $0.30/M out | 97.1% quality on extraction benchmarks; cheaper than primary |
-| Studio opt-in | **Claude Haiku 4.5** | ~$0.80/M in, $4/M out | Highest extraction nuance when needed; 8x more expensive |
+```bash
+# Sign up at supabase.com (free), create new project "snapcommit"
+# Install CLI: brew install supabase/tap/supabase
 
-Per-extraction cost (~3K input + 500 output tokens):
-- GPT-5 Nano: ~$0.0005
-- Gemini 2.5 Flash: ~$0.0004
-- Haiku 4.5: ~$0.0044
+cd cloud/supabase
 
-## Costs (per user/month estimates with GPT-5 Nano primary)
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push                          # runs the migration
+supabase secrets set OPENAI_API_KEY=sk-... DODO_API_KEY=... DODO_WEBHOOK_SECRET=...
+supabase functions deploy                 # deploys all 6 functions
 
-| Tier | Quota | Model cost | Dodo fee | Net @ price | Margin |
-|------|-------|------------|----------|-------------|--------|
-| Free | 5 | $0.0025 | $0 | -$0.0025 | acquisition |
-| Hobby $9 | 200 | $0.10 | ~$0.50 | $8.40 | ~93% |
-| Pro $29 | 2,000 | $1.00 | ~$1.50 | $26.50 | ~91% |
-| Studio $129 | 10,000 | $5.00 | ~$6.00 | $118.00 | ~91% |
+# Done. Endpoints live at:
+# https://<project-ref>.supabase.co/functions/v1/extract
+# https://<project-ref>.supabase.co/functions/v1/demo-extract
+# ...
+```
 
-To hit $100K MRR: blended ~3,500-5,500 paying users (depending on tier mix). Solo-sustainable forever at these margins.
+In MCP server config (or env): point `SNAPCOMMIT_API` at `https://<project-ref>.supabase.co/functions/v1`.
 
-## Stack
+## Costs
 
-- **Cloudflare Worker** — handles all endpoints. Free tier: 100K req/day.
-- **Cloudflare D1** — accounts + usage. Free tier: 5M reads/day, 100K writes/day.
-- **Cloudflare KV** — optional rate-limit counters.
-- **Dodo Payments** — billing + tax + subscription lifecycle.
-- **Resend** — magic-link signup emails ($0 up to 3K/mo).
-- **Anthropic API key** — single org-level key. Cost scales with usage.
+- **Free Supabase tier**: 500MB DB, 2GB bandwidth, 50K MAU, 500K Edge Function invocations/month. Covers the first few thousand users.
+- **Pro Supabase tier ($25/mo flat)**: 8GB DB, 100GB bandwidth, 250K MAU, 2M Edge Function invocations. Covers up to ~$100K MRR.
+- **OpenAI/Anthropic/Gemini costs**: variable; see margin table below.
 
-Total infra cost at <10K users: **~$0/month**. At >10K users: minimal Cloudflare paid plan.
+| Tier | Quota | LLM cost | Dodo fee | Net | Margin |
+|------|-------|----------|----------|-----|--------|
+| Hobby $9 | 200 | ~$0.10 | ~$0.50 | $8.40 | ~93% |
+| Pro $29 | 2,000 | ~$1.00 | ~$1.50 | $26.50 | ~91% |
+| Studio $129 | 10,000 | ~$5.00 | ~$6.00 | $118.00 | ~91% |
 
-## Implementation order
+Plus demo cost: 3 calls/IP × ~$0.0005/call. At 1,000 unique IPs/day = ~$45/month in acquisition.
 
-1. D1 database + schema deployed
-2. Worker route `/v1/auth/signup` — basic email-token flow
-3. Worker route `/v1/account` — read tier/usage
-4. Worker route `/v1/extract` — the money endpoint
-5. Dodo Payments product setup + webhook handler
-6. Resend magic-link email
-7. snapcommit.com signup page (Next.js, can reuse dashboard package)
+## Why Supabase (vs Cloudflare Workers + D1 + Resend)
 
-Estimated total: 1 week solo.
+- One dashboard, one CLI, one bill, one mental model
+- Auth + email built-in (we never write magic-link code)
+- Postgres > SQLite for debugging at scale
+- Row-level security is one-click
+- `supabase start` brings up the entire stack locally
+
+The MCP server (client-side) doesn't care which backend lives at `SNAPCOMMIT_API`. If we ever need to migrate, the swap is one URL change.
