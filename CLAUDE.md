@@ -1,0 +1,94 @@
+# Snapcommit — Build Rules (Locked)
+
+Memory layer for AI tools. One MCP server, works across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf, and 25+ other MCP clients. Genuinely local-first. Open source MIT.
+
+These rules are non-negotiable. Every decision passes through them.
+
+## The product principle
+
+**Make copy-paste obviously stupid.**
+
+If a feature doesn't make the markdown-context workaround look primitive in comparison, it's not in v1. The bar is "10x better than maintaining your own .md file," not "slightly better."
+
+## Hard constraints
+
+1. **Solo-buildable.** No feature requires a team, co-founder, or hire. If a path can't be shipped by one person in one weekend (per feature), it's wrong.
+2. **MCP-first.** v1 is an MCP server only. No Chrome scraping, no DOM parsing, no fragile site integrations.
+3. **Genuinely local-first.** Data lives on the user's machine by default. We do not lie about this like OpenMemory does. Cloud sync is opt-in, paid, encrypted.
+4. **No team/enterprise in v1.** Single user, single device, single brain. Multi-device sync is v2 maybe. Team plans don't exist.
+5. **One price + free OSS.** $9/mo Pro for cloud sync. Free open source for local-only forever. No team tier, no enterprise tier.
+6. **Open source from day one.** MIT licensed. Public repo before code is finished. Stars accumulate during build.
+7. **Beautiful DX.** Linear/Resend grade. If the docs are ugly or the README is generic, fix it before shipping.
+8. **No invented pain.** Every feature traces to a validated user complaint from Reddit/HN/Indie Hackers data we already gathered.
+9. **Ship in 4-5 weeks.** Time-box aggressively. Cut scope, never extend timeline.
+10. **No team-collaboration features ever.** Founder explicitly said they cannot maintain that complexity solo. Shared workspaces, RBAC, audit logs — all forbidden in v1, v2, v3.
+
+## What's IN v1
+
+1. MCP server with tools: `save_memory`, `recall_memory`, `list_projects`, `update_memory`, `delete_memory`
+2. Local SQLite storage with passphrase-derived encryption
+3. `npx @snapcommit/install` — auto-detects Claude Code / Cursor / VS Code / Claude Desktop / Cline / Windsurf and writes config to each
+4. Simple web dashboard (Next.js) for browse/search/edit memories
+5. Project-aware routing (heuristics first, smarter later)
+6. Captures decisions AND rejections (not just facts)
+
+## What's OUT of v1 (and probably out of v2)
+
+- ❌ Team workspaces
+- ❌ Shared memories between users
+- ❌ Cross-device sync (v2 candidate, NOT v1)
+- ❌ Chrome extension (v3 maybe)
+- ❌ Mobile app
+- ❌ Voice mode
+- ❌ Web-only AI tool support (ChatGPT.com, Claude.ai web) — they don't speak MCP yet
+- ❌ Custom model fine-tuning
+- ❌ Anything requiring training data collection
+- ❌ Auto-update without explicit user consent (no OpenMemory-style deception)
+
+## Tech stack (locked)
+
+- TypeScript, ESM modules
+- `@modelcontextprotocol/sdk` — official MCP SDK
+- `better-sqlite3` — local storage (sync, fast, simple, file-based)
+- `zod` — schema validation
+- `@xenova/transformers` — local embeddings if needed (no API cost)
+- Node 20+ (let LTS handle compatibility)
+- Build: `tsc` → ESM output
+- Test: `vitest`
+- Lint: just `prettier`, no eslint complexity for now
+
+For dashboard (separate package later):
+- Next.js 15 App Router
+- Tailwind
+- shadcn/ui for components
+
+## Anti-patterns (do not do these)
+
+- ❌ Adding configuration options "for flexibility" — pick the right default
+- ❌ Inventing memory abstractions when the use case is concrete
+- ❌ Premature multi-tenancy
+- ❌ Custom protocols — use MCP as designed
+- ❌ Writing a database — use SQLite
+- ❌ "Enterprise-ready" features before any users exist
+- ❌ Verbose error handling for impossible cases
+- ❌ Comments that explain what the code does (only why, only when surprising)
+- ❌ Telemetry that captures user content
+- ❌ Defaults that send data anywhere by default
+
+## What I (Claude) should do when working on this repo
+
+- Read this file before any change
+- Prefer Edit over Write for existing files
+- Don't add scope creep. If a feature isn't on the v1 list, don't add it.
+- Test that the MCP server actually works in Claude Code locally before claiming done
+- If a feature is hard to explain in one sentence, it's probably wrong
+
+## Validation lens — apply on every decision
+
+- Does this make copy-paste look stupid?
+- Can solo Arjun ship this in one weekend?
+- Does this validate against the Reddit pain data?
+- Is the user data still on their machine by default?
+- Would a Linear or Resend engineer ship this UX?
+
+If any answer is no, change the decision.
