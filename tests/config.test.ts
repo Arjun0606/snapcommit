@@ -84,10 +84,21 @@ describe("config", () => {
     expect(currentQuota()).toBe(9999);
   });
 
-  it("TIER_QUOTAS has correct tier values", () => {
-    expect(TIER_QUOTAS.free).toBe(5);
+  it("TIER_QUOTAS has correct tier values (free is now 3 lifetime)", () => {
+    expect(TIER_QUOTAS.free).toBe(3);
     expect(TIER_QUOTAS.hobby).toBe(200);
     expect(TIER_QUOTAS.pro).toBe(2000);
     expect(TIER_QUOTAS.studio).toBe(10000);
+  });
+
+  it("ensureDevice mints a stable id and label on first call", async () => {
+    const { ensureDevice } = await import("../src/config.js");
+    const a = ensureDevice();
+    expect(a.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(a.label).toBeTruthy();
+    // Idempotent — second call returns the same id
+    const b = ensureDevice();
+    expect(b.id).toBe(a.id);
+    expect(b.label).toBe(a.label);
   });
 });

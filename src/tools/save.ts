@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MemoryStore } from "../db.js";
 import { detectProject } from "../project.js";
+import { ensureDevice } from "../config.js";
 
 export const saveMemorySchema = {
   content: z.string().min(1).describe("The memory content to save. Be specific — a decision, a rejected approach with reason, a preference, a fact about the codebase, or an open question."),
@@ -9,7 +10,12 @@ export const saveMemorySchema = {
   tags: z.array(z.string()).optional().describe("Free-form tags for later filtering."),
 };
 
-export function saveMemory(store: MemoryStore) {
+/**
+ * Factory takes the live MCP client name (e.g., 'claude-code', 'cursor') so
+ * every saved memory carries its origin. Critical for users running multiple
+ * agents against the same memory file.
+ */
+export function saveMemory(store: MemoryStore, getAgentName: () => string | null) {
   return async (args: {
     content: string;
     project?: string;
@@ -17,12 +23,19 @@ export function saveMemory(store: MemoryStore) {
     tags?: string[];
   }) => {
     const project = args.project ?? detectProject() ?? undefined;
-    const saved = store.save({ ...args, project });
+    const device = ensureDevice();
+    const sourceAgent = getAgentName() ?? undefined;
+    const saved = store.save({
+      ...args,
+      project,
+      source_agent: sourceAgent,
+      source_device: device.label,
+    });
     return {
       content: [
         {
           type: "text" as const,
-          text: `Saved memory #${saved.id} (${saved.kind}${saved.project ? `, project: ${saved.project}` : ""})`,
+          text: `Saved memory #${saved.id} (${saved.kind}${saved.project ? `, project: ${saved.project}` : ""}${sourceAgent ? `, via: ${sourceAgent}` : ""})`,
         },
       ],
     };

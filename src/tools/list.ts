@@ -5,6 +5,8 @@ import { detectProject } from "../project.js";
 export const listMemoriesSchema = {
   project: z.string().optional().describe("Filter by project. If omitted, auto-scopes to detected current project. Pass empty string '' to show all."),
   kind: z.enum(["decision", "rejection", "preference", "fact", "open_question"]).optional().describe("Filter by memory type."),
+  source_agent: z.string().optional().describe("Filter to memories created by a specific AI agent (e.g., 'claude-code', 'cursor')."),
+  source_device: z.string().optional().describe("Filter to memories created on a specific device label."),
   limit: z.number().int().positive().max(100).optional().describe("Max results (default 20)."),
 };
 
@@ -14,6 +16,8 @@ function formatMemory(m: Memory): string {
     `#${m.id}`,
     m.kind,
     m.project ? m.project : null,
+    m.source_agent ? `via:${m.source_agent}` : null,
+    m.source_device ? `on:${m.source_device}` : null,
     tags.length ? `[${tags.join(",")}]` : null,
     m.created_at.slice(0, 10),
   ].filter(Boolean).join(" · ");
@@ -24,6 +28,8 @@ export function listMemories(store: MemoryStore) {
   return async (args: {
     project?: string;
     kind?: Memory["kind"];
+    source_agent?: string;
+    source_device?: string;
     limit?: number;
   }) => {
     let scoped: string | undefined;
@@ -34,6 +40,12 @@ export function listMemories(store: MemoryStore) {
     let memories = store.recent(scoped, args.limit ?? 20);
     if (args.kind) {
       memories = memories.filter((m) => m.kind === args.kind);
+    }
+    if (args.source_agent) {
+      memories = memories.filter((m) => m.source_agent === args.source_agent);
+    }
+    if (args.source_device) {
+      memories = memories.filter((m) => m.source_device === args.source_device);
     }
 
     if (memories.length === 0) {

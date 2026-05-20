@@ -15,6 +15,7 @@ import {
   writeConfig,
   currentTier,
   nextTier,
+  ensureDevice,
   TIER_QUOTAS,
   TIER_PRICES,
 } from "../config.js";
@@ -121,7 +122,7 @@ export const smartExtractSchema = {
     .describe("If true, return extracted memories without saving them locally."),
 };
 
-export function smartExtract(store: MemoryStore) {
+export function smartExtract(store: MemoryStore, getAgentName: () => string | null) {
   return async (args: { content: string; project?: string; dry_run?: boolean }) => {
     const cfg = readConfig();
     if (!cfg.apiToken) {
@@ -205,8 +206,17 @@ export function smartExtract(store: MemoryStore) {
       };
     }
 
+    const device = ensureDevice();
+    const sourceAgent = getAgentName() ?? undefined;
     const saved = result.memories.map((m) =>
-      store.save({ content: m.content, kind: m.kind, tags: m.tags, project }),
+      store.save({
+        content: m.content,
+        kind: m.kind,
+        tags: m.tags,
+        project,
+        source_agent: sourceAgent,
+        source_device: device.label,
+      }),
     );
 
     return {

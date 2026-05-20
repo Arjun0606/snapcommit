@@ -9,6 +9,8 @@ export interface Memory {
   project: string | null;
   kind: "decision" | "rejection" | "preference" | "fact" | "open_question";
   tags: string;
+  source_agent: string | null;
+  source_device: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,6 +20,8 @@ export interface NewMemory {
   project?: string;
   kind?: Memory["kind"];
   tags?: string[];
+  source_agent?: string;
+  source_device?: string;
 }
 
 function dbPath(): string {
@@ -36,6 +40,8 @@ export class MemoryStore {
   }
 
   private migrate(): void {
+    // 1. Base table — creates if absent, no-op if it already exists with the
+    //    older schema (we'll patch columns next).
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,13 +49,34 @@ export class MemoryStore {
         project TEXT,
         kind TEXT NOT NULL DEFAULT 'fact',
         tags TEXT NOT NULL DEFAULT '[]',
+        source_agent TEXT,
+        source_device TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+    `);
 
+    // 2. Forward-compat ALTERs. CREATE TABLE IF NOT EXISTS is a no-op for
+    //    pre-existing tables, so older DBs miss the source_* columns until
+    //    we add them here. Try/catch handles already-migrated DBs.
+    try {
+      this.db.exec(`ALTER TABLE memories ADD COLUMN source_agent TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.exec(`ALTER TABLE memories ADD COLUMN source_device TEXT`);
+    } catch {
+      /* column already exists */
+    }
+
+    // 3. Indexes and FTS — safe to run now that columns are guaranteed present.
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_project ON memories(project);
       CREATE INDEX IF NOT EXISTS idx_kind ON memories(kind);
       CREATE INDEX IF NOT EXISTS idx_created ON memories(created_at);
+      CREATE INDEX IF NOT EXISTS idx_source_agent ON memories(source_agent);
+      CREATE INDEX IF NOT EXISTS idx_source_device ON memories(source_device);
 
       CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
         content,
@@ -80,8 +107,8 @@ export class MemoryStore {
 
   save(m: NewMemory): Memory {
     const stmt = this.db.prepare(`
-      INSERT INTO memories (content, project, kind, tags)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO memories (content, project, kind, tags, source_agent, source_device)
+      VALUES (?, ?, ?, ?, ?, ?)
       RETURNING *
     `);
     const result = stmt.get(
@@ -89,8 +116,36 @@ export class MemoryStore {
       m.project ?? null,
       m.kind ?? "fact",
       JSON.stringify(m.tags ?? []),
+      m.source_agent ?? null,
+      m.source_device ?? null,
     ) as Memory;
     return result;
+  }
+
+  /** Distinct devices that have written memories to this DB. */
+  devices(): { id: string; count: number }[] {
+    return this.db
+      .prepare(
+        `SELECT source_device AS id, COUNT(*) AS count
+           FROM memories
+          WHERE source_device IS NOT NULL
+       GROUP BY source_device
+       ORDER BY count DESC`,
+      )
+      .all() as { id: string; count: number }[];
+  }
+
+  /** Distinct AI agents that have written memories to this DB. */
+  agents(): { name: string; count: number }[] {
+    return this.db
+      .prepare(
+        `SELECT source_agent AS name, COUNT(*) AS count
+           FROM memories
+          WHERE source_agent IS NOT NULL
+       GROUP BY source_agent
+       ORDER BY count DESC`,
+      )
+      .all() as { name: string; count: number }[];
   }
 
   search(query: string, project?: string, limit = 20): Memory[] {

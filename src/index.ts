@@ -34,20 +34,41 @@ import {
   accountStatus,
   logout,
 } from "./tools/account.js";
+import {
+  useIcloud,
+  useDropbox,
+  useOneDrive,
+  useGoogleDrive,
+} from "./tools/cloud-presets.js";
 
 async function main(): Promise<void> {
   const store = new MemoryStore();
+
+  // Track which MCP client connected (set by SDK on initialize handshake)
+  let clientAgentName: string | null = null;
+  const getAgentName = () => clientAgentName;
 
   const server = new McpServer({
     name: "snapcommit",
     version: "0.1.0",
   });
 
+  // Inspect the client info that the MCP SDK exposes after initialize.
+  // We poll it from the underlying server object — best-effort, falls back to null.
+  setTimeout(() => {
+    try {
+      const inner = (server as unknown as { server?: { _clientInfo?: { name?: string } } }).server;
+      if (inner?._clientInfo?.name) clientAgentName = inner._clientInfo.name;
+    } catch {
+      /* leave as null */
+    }
+  }, 50);
+
   server.tool(
     "save_memory",
     "Save a memory from this conversation. Use for decisions, things you tried and rejected (with reason), preferences, facts about the codebase, or open questions. Call this proactively when something is worth remembering for future sessions.",
     saveMemorySchema,
-    saveMemory(store),
+    saveMemory(store, getAgentName),
   );
 
   server.tool(
@@ -149,9 +170,41 @@ async function main(): Promise<void> {
 
   server.tool(
     "snapcommit_smart_extract",
-    "Extract structured memories from a conversation summary or transcript: decisions, rejections (with reasons), preferences, facts, open questions. Uses Snapcommit's cloud for LLM extraction (we never store your content — processed in-flight only). Counts against your monthly quota. Free: 5/mo. Hobby: 200. Pro: 2000. Studio: 10000.",
+    "Extract structured memories from a conversation summary or transcript: decisions, rejections (with reasons), preferences, facts, open questions. Uses Snapcommit's cloud for LLM extraction (we never store your content — processed in-flight only). Counts against your quota. Free: 3 LIFETIME. Hobby: 200/mo. Pro: 2000/mo. Studio: 10000/mo.",
     smartExtractSchema,
-    smartExtract(store),
+    smartExtract(store, getAgentName),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Cloud presets — plug-and-play storage on common providers
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_use_icloud",
+    "One-shot: move Snapcommit storage to the user's iCloud Drive (Mac/iOS). Their existing iCloud sync handles cross-device + sharing. After this, restart the AI client.",
+    {},
+    useIcloud(),
+  );
+
+  server.tool(
+    "snapcommit_use_dropbox",
+    "One-shot: move Snapcommit storage to the user's Dropbox folder. Dropbox handles cross-device + sharing.",
+    {},
+    useDropbox(),
+  );
+
+  server.tool(
+    "snapcommit_use_onedrive",
+    "One-shot: move Snapcommit storage to the user's OneDrive folder. OneDrive handles cross-device + sharing.",
+    {},
+    useOneDrive(),
+  );
+
+  server.tool(
+    "snapcommit_use_google_drive",
+    "One-shot: move Snapcommit storage to the user's Google Drive folder (desktop client required). Google Drive handles cross-device + sharing.",
+    {},
+    useGoogleDrive(),
   );
 
   server.tool(

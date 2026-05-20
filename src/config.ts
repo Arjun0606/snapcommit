@@ -9,7 +9,8 @@
  * user's home directory, same trust level as ~/.aws/credentials or ~/.npmrc.
  */
 import { existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
+import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 
 export type Tier = "free" | "hobby" | "pro" | "studio";
@@ -25,14 +26,29 @@ export interface UserConfig {
   monthlyQuota?: number;
   /** Last verification timestamp. */
   tierVerifiedAt?: string;
+  /** Stable device identifier (uuid). Generated on first run, never changes. */
+  deviceId?: string;
+  /** Human-readable device label (e.g., 'arjun-macbook'). User-editable. */
+  deviceLabel?: string;
 }
 
-/** Quota by tier — kept in code for offline display; server is source of truth. */
+/**
+ * Quota by tier — for offline display. Server is source of truth.
+ * Free is LIFETIME, not monthly — prevents account-cycling abuse.
+ */
 export const TIER_QUOTAS: Record<Tier, number> = {
-  free: 5,
-  hobby: 200,
-  pro: 2000,
-  studio: 10000,
+  free: 3,       // LIFETIME — 3 calls to evaluate, then upgrade
+  hobby: 200,    // monthly
+  pro: 2000,     // monthly
+  studio: 10000, // monthly
+};
+
+/** Whether a tier's quota resets monthly. Free is one-shot lifetime. */
+export const TIER_RESETS_MONTHLY: Record<Tier, boolean> = {
+  free: false,
+  hobby: true,
+  pro: true,
+  studio: true,
 };
 
 /** Price per month in USD by tier — for offline display. Server is source of truth. */
@@ -99,6 +115,29 @@ export function resolveStoragePath(): string {
 export function isAuthenticated(): boolean {
   const cfg = readConfig();
   return Boolean(cfg.apiToken);
+}
+
+/**
+ * Get or create a stable device id + label. Idempotent — the first call
+ * mints it, every subsequent call returns the cached value.
+ */
+export function ensureDevice(): { id: string; label: string } {
+  const cfg = readConfig();
+  let id = cfg.deviceId;
+  let label = cfg.deviceLabel;
+  let changed = false;
+
+  if (!id) {
+    id = randomUUID();
+    changed = true;
+  }
+  if (!label) {
+    label = `${process.env.USER ?? "user"}@${hostname()}`;
+    changed = true;
+  }
+
+  if (changed) writeConfig({ deviceId: id, deviceLabel: label });
+  return { id, label };
 }
 
 export function currentTier(): Tier {

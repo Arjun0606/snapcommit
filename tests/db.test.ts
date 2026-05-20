@@ -158,4 +158,84 @@ describe("MemoryStore", () => {
       expect(found[0].kind).toBe("rejection");
     });
   });
+
+  describe("source tracking (multi-agent, multi-device segregation)", () => {
+    it("records source_agent and source_device on save", () => {
+      const m = store.save({
+        content: "Decision from Claude Code on the work laptop",
+        kind: "decision",
+        source_agent: "claude-code",
+        source_device: "arjun@macbook-pro",
+      });
+      expect(m.source_agent).toBe("claude-code");
+      expect(m.source_device).toBe("arjun@macbook-pro");
+    });
+
+    it("returns null source fields when not provided", () => {
+      const m = store.save({ content: "Agent-less memory" });
+      expect(m.source_agent).toBeNull();
+      expect(m.source_device).toBeNull();
+    });
+
+    it("devices() aggregates distinct source devices", () => {
+      store.save({ content: "a", source_device: "laptop" });
+      store.save({ content: "b", source_device: "laptop" });
+      store.save({ content: "c", source_device: "phone" });
+      store.save({ content: "d" });
+
+      const devices = store.devices();
+      expect(devices).toContainEqual({ id: "laptop", count: 2 });
+      expect(devices).toContainEqual({ id: "phone", count: 1 });
+      expect(devices.find((d) => d.id === null)).toBeUndefined();
+    });
+
+    it("agents() aggregates distinct AI agents", () => {
+      store.save({ content: "x", source_agent: "claude-code" });
+      store.save({ content: "y", source_agent: "claude-code" });
+      store.save({ content: "z", source_agent: "cursor" });
+
+      const agents = store.agents();
+      expect(agents).toContainEqual({ name: "claude-code", count: 2 });
+      expect(agents).toContainEqual({ name: "cursor", count: 1 });
+    });
+  });
+
+  describe("schema migration (existing DBs without source columns)", () => {
+    it("ALTER TABLE migration adds source columns without losing data", async () => {
+      const fs = await import("node:fs");
+      const Database = (await import("better-sqlite3")).default;
+
+      const oldPath = `${dbPath}.old`;
+      const old = new Database(oldPath);
+      old.exec(`
+        CREATE TABLE memories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          project TEXT,
+          kind TEXT NOT NULL DEFAULT 'fact',
+          tags TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO memories (content) VALUES ('legacy memory before migration');
+      `);
+      old.close();
+
+      // Open with the migrating MemoryStore — should add columns + preserve row
+      const migrated = new MemoryStore(oldPath);
+      const all = migrated.recent(undefined, 10);
+      expect(all.length).toBe(1);
+      expect(all[0].content).toBe("legacy memory before migration");
+      expect(all[0].source_agent).toBeNull();
+      expect(all[0].source_device).toBeNull();
+      const fresh = migrated.save({
+        content: "post-migration",
+        source_agent: "cursor",
+        source_device: "phone",
+      });
+      expect(fresh.source_agent).toBe("cursor");
+      migrated.close();
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    });
+  });
 });
