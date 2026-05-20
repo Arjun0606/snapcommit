@@ -40,6 +40,11 @@ import {
   useOneDrive,
   useGoogleDrive,
 } from "./tools/cloud-presets.js";
+import {
+  openBilling,
+  deleteAccount,
+  deleteAccountSchema,
+} from "./tools/lifecycle.js";
 
 async function main(): Promise<void> {
   const store = new MemoryStore();
@@ -205,6 +210,24 @@ async function main(): Promise<void> {
     "One-shot: move Snapcommit storage to the user's Google Drive folder (desktop client required). Google Drive handles cross-device + sharing.",
     {},
     useGoogleDrive(),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Account lifecycle — billing portal, deletion
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_open_billing",
+    "Get a one-time link to the user's billing portal (Dodo Payments). From there they can update payment method, upgrade/downgrade tier, cancel subscription, or download invoices. Use when the user mentions billing, upgrading, downgrading, canceling, or paying.",
+    {},
+    openBilling(),
+  );
+
+  server.tool(
+    "snapcommit_delete_account",
+    "Start the account-deletion flow. Without the confirm phrase, sends a confirmation email; user must click the link within 24h. With the confirm phrase, deletes immediately. Local memories on the user's machine are NEVER touched.",
+    deleteAccountSchema,
+    deleteAccount(),
   );
 
   server.tool(

@@ -84,6 +84,28 @@ Create a new account. Generates API token, returns it once.
 
 (In production, this is a magic-link email flow. For v0 we can ship a simple form on snapcommit.com.)
 
+### `POST /v1/account/portal`
+
+Generate a one-time URL to the user's Dodo customer portal. Hand to client; client opens in browser.
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response 200**: `{ "url": "https://billing.dodopayments.com/portal/..." }`
+
+Worker logic: look up `dodo_customer_id` for the user, call Dodo's `portal/create-session` API, return the URL.
+
+### `POST /v1/account/delete`
+
+Start (or finalize) account deletion.
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Body**: `{ "confirm": true }` or `{ "confirm": false }`
+
+If `confirm === false`: generate a JWT signed deletion-confirmation token, email it via Resend (link: `https://snapcommit.com/delete?token=...`), return `{ "state": "email_sent" }`.
+
+If `confirm === true` (called from the email confirmation page after JWT verify, OR with the magic phrase from MCP): cancel Dodo subscription, delete all user-scoped rows, return `{ "state": "deleted" }`.
+
 ### Dodo Payments webhook
 
 Handles tier upgrades, cancellations, and payment failures (dunning).
