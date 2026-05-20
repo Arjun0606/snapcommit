@@ -11,7 +11,14 @@
  * Cloud is the source of truth for tier. We cache locally for offline display.
  */
 import { z } from "zod";
-import { readConfig, writeConfig, TIER_QUOTAS, type Tier } from "../config.js";
+import {
+  readConfig,
+  writeConfig,
+  TIER_QUOTAS,
+  TIER_PRICES,
+  nextTier,
+  type Tier,
+} from "../config.js";
 
 const API_BASE = process.env.SNAPCOMMIT_API ?? "https://api.snapcommit.com";
 
@@ -145,6 +152,15 @@ export function accountStatus() {
       tierVerifiedAt: new Date().toISOString(),
     });
 
+    const next = nextTier(info.tier);
+    const pct = info.used_this_month / info.monthly_quota;
+    const upgradeLine =
+      pct >= 0.8 && next
+        ? `\n⚠ You've used ${Math.round(pct * 100)}%. Consider ${next} tier ($${TIER_PRICES[next]}/mo, ${TIER_QUOTAS[next]} calls) at https://snapcommit.com/pricing`
+        : next
+        ? `\nNext tier: ${next} — $${TIER_PRICES[next]}/mo for ${TIER_QUOTAS[next]} calls. https://snapcommit.com/pricing`
+        : `\nTop tier — thank you for supporting Snapcommit.`;
+
     return {
       content: [
         {
@@ -154,10 +170,7 @@ export function accountStatus() {
             `Tier: ${info.tier}`,
             `Quota: ${info.used_this_month} / ${info.monthly_quota} smart-extractions this month`,
             `Remaining: ${info.monthly_quota - info.used_this_month}`,
-            ``,
-            info.tier !== "studio"
-              ? `Upgrade at https://snapcommit.com/pricing`
-              : `Top tier — thank you for the support.`,
+            upgradeLine,
           ].join("\n"),
         },
       ],

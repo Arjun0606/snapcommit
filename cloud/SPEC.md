@@ -86,13 +86,32 @@ Create a new account. Generates API token, returns it once.
 
 ### Dodo Payments webhook
 
-Handles tier upgrades / cancellations.
+Handles tier upgrades, cancellations, and payment failures (dunning).
 
 **`POST /v1/webhooks/dodo`** with HMAC-signed payload from Dodo.
 
-When `subscription.created` or `subscription.updated`: look up customer email → update user's `tier` and `monthly_quota` in D1.
+Events we handle:
 
-When `subscription.canceled`: downgrade user to `free` tier at end of billing period.
+| Event | Action |
+|-------|--------|
+| `subscription.created` | Upsert user row → set `tier` and `monthly_quota` |
+| `subscription.updated` | Update user's tier/quota if subscription tier changed |
+| `subscription.canceled` | At billing-period end: downgrade user to `free` tier |
+| `payment.failed` | Mark subscription as `past_due` (still active for grace period) |
+| `subscription.past_due` | Email user (via Resend) — payment failed, retrying |
+| `subscription.paused` | Downgrade to free immediately after final retry fails |
+
+**Dodo handles its own dunning emails:**
+- Day -7 before renewal: reminder email (handled by Dodo)
+- Day 0: charge attempt
+- Days +3, +7, +14: automatic retry + reminder email (Dodo)
+- Day +21: subscription paused → webhook fires → we downgrade
+
+We don't run our own cron. We don't send our own billing emails. Dodo's standard merchant-of-record flow covers it.
+
+### Upgrade nudge endpoint (optional)
+
+**`POST /v1/nudge/dismiss`** — when user clicks "remind me later" on an upgrade prompt, store dismissal so we don't nag too often. Not v1 critical.
 
 ## D1 schema
 
@@ -127,16 +146,29 @@ CREATE TABLE extraction_log (
 
 **No table stores `content`. Ever.** Logs are metadata only.
 
-## Costs (per user/month estimates)
+## Model strategy
 
-| Tier | Quota | Anthropic cost | Net @ price | Margin |
-|------|-------|---------------|-------------|--------|
-| Free | 5 | $0.02 | $0 - $0.02 | -- |
-| Hobby $9 | 200 | $0.88 | $8.12 | 90% |
-| Pro $29 | 2,000 | $8.80 | $20.20 | 70% |
-| Studio $99 | 10,000 | $44.00 | $55.00 | 55% |
+| Role | Model | Pricing (May 2026) | Why |
+|------|-------|---------------------|-----|
+| Primary | **GPT-5 Nano** | ~$0.10/M in, $0.40/M out | Best structured-output quality at this price tier; OpenAI's response_format=json_object is reliable |
+| Failover | **Gemini 2.5 Flash** | ~$0.075/M in, $0.30/M out | 97.1% quality on extraction benchmarks; cheaper than primary |
+| Studio opt-in | **Claude Haiku 4.5** | ~$0.80/M in, $4/M out | Highest extraction nuance when needed; 8x more expensive |
 
-Assumes Anthropic Haiku at ~$0.0044 per extraction (3K input + 500 output tokens).
+Per-extraction cost (~3K input + 500 output tokens):
+- GPT-5 Nano: ~$0.0005
+- Gemini 2.5 Flash: ~$0.0004
+- Haiku 4.5: ~$0.0044
+
+## Costs (per user/month estimates with GPT-5 Nano primary)
+
+| Tier | Quota | Model cost | Dodo fee | Net @ price | Margin |
+|------|-------|------------|----------|-------------|--------|
+| Free | 5 | $0.0025 | $0 | -$0.0025 | acquisition |
+| Hobby $9 | 200 | $0.10 | ~$0.50 | $8.40 | ~93% |
+| Pro $29 | 2,000 | $1.00 | ~$1.50 | $26.50 | ~91% |
+| Studio $129 | 10,000 | $5.00 | ~$6.00 | $118.00 | ~91% |
+
+To hit $100K MRR: blended ~3,500-5,500 paying users (depending on tier mix). Solo-sustainable forever at these margins.
 
 ## Stack
 

@@ -91,10 +91,11 @@ Architecture:
 - Conflict detection across devices
 - Priority response on issues
 
-**Studio** — $99/mo
+**Studio** — $129/mo
 - Everything in Pro
 - **10,000 smart-extraction calls/month** (fair use)
 - Custom extraction prompts
+- Optional higher-quality extraction (Claude Haiku 4.5 instead of GPT-5 Nano)
 - Early access to new features
 
 **What we DON'T charge for**:
@@ -105,21 +106,39 @@ Architecture:
 - Self-hosted Notion adapter
 - Number of devices
 
+**Model strategy (locked May 2026)**:
+- Primary: **GPT-5 Nano** for structured extraction (~$0.10/M input, $0.40/M output, best structured-output quality at this price tier per benchmarks)
+- Failover: **Gemini 2.5 Flash** if OpenAI rate-limits or errors (~$0.075/M input, $0.30/M output, 97.1% quality on extraction benchmarks)
+- Studio upgrade: optional **Claude Haiku 4.5** for highest extraction quality on demand
+- Routing handled by the Cloudflare Worker — users never pick
+
 **Math (autopilot via Dodo + tiered SaaS)**:
-- Cost per extraction (Anthropic Haiku, ~3K in / 500 out): ~$0.0044
-- Hobby $9: ~$0.88 cost @ 200 calls = ~90% margin
-- Pro $29: ~$8.80 cost @ 2000 calls = ~70% margin
-- Studio $99: ~$44 cost @ 10000 calls = ~55% margin
-- Dodo Payments merchant of record = handles tax compliance globally
-- Cloudflare Workers/D1 for usage tracking = free tier covers tens of thousands of users
+- Cost per extraction with GPT-5 Nano (~3K in / 500 out): ~$0.0005
+- Hobby $9: ~$0.10 cost @ 200 calls = ~93% margin after Dodo fees
+- Pro $29: ~$1.00 cost @ 2,000 calls = ~91% margin
+- Studio $129: ~$5.00 cost @ 10,000 calls = ~91% margin
+- Failover to Gemini Flash: similar costs, similar margins
+- Dodo Payments merchant of record = handles tax compliance globally (~$5 fee per sale)
+- Cloudflare Workers/D1 free tier covers tens of thousands of users
 - To hit ~$100K MRR: blended ~5,500 paying users across tiers (achievable)
+
+**Automated billing + upgrade nudges**:
+- Quota nudges in MCP responses at 80% / 95% / 100% — gentle → urgent → blocked
+- Each tier shows the next-tier upgrade URL inline
+- Dodo Payments handles dunning automatically:
+  - Day -7: subscription renewal heads-up email
+  - Day 0: charge attempt
+  - Day +3, +7, +14 on failure: retries + reminder emails
+  - Day +21: subscription paused, user downgraded to Free
+- Webhook on `subscription.canceled` → update tier in D1 → user gets nudged on next MCP call
 
 **Why this is autopilot**:
 - One API key (ours) instead of N user keys to manage
 - We process, we don't store → minimal compliance burden
-- Stripe-like subscriptions through Dodo (tax handled)
-- Usage caps make Studio profitable even for power users
-- Free tier broad (no AI-feature lock-in for early users), Pro-tier upsell natural when they want more extraction
+- Dodo handles tax, dunning, refunds, chargebacks
+- Quota caps make every tier profitable even for power users
+- Free tier broad (no AI-feature lock-in for early users), upsell natural when quota tightens
+- All margins >90% — solo-sustainable forever
 
 ## Hard constraints
 

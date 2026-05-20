@@ -10,8 +10,43 @@
  */
 import { z } from "zod";
 import type { MemoryStore } from "../db.js";
-import { readConfig, writeConfig } from "../config.js";
+import {
+  readConfig,
+  writeConfig,
+  currentTier,
+  nextTier,
+  TIER_QUOTAS,
+  TIER_PRICES,
+} from "../config.js";
 import { detectProject } from "../project.js";
+
+/**
+ * Auto-upgrade nudge. Returns a short message to append to tool responses
+ * when the user is approaching or has exceeded their quota.
+ */
+function quotaNudge(used: number, quota: number): string | null {
+  const pct = used / quota;
+  const remaining = quota - used;
+  const tier = currentTier();
+  const next = nextTier(tier);
+
+  if (pct >= 1) {
+    return next
+      ? `\n\nYou're out of extractions this month. Upgrade to ${next} ($${TIER_PRICES[next]}/mo, ${TIER_QUOTAS[next]} calls) at https://snapcommit.com/pricing`
+      : null;
+  }
+  if (pct >= 0.95) {
+    return next
+      ? `\n\n⚠ ${remaining} extractions left this month. Upgrade to ${next} (${TIER_QUOTAS[next]}/mo) at https://snapcommit.com/pricing`
+      : null;
+  }
+  if (pct >= 0.8) {
+    return next
+      ? `\n\nHeads up: ${remaining} extractions left this month. ${next} tier (${TIER_QUOTAS[next]}/mo, $${TIER_PRICES[next]}) at https://snapcommit.com/pricing if you want headroom.`
+      : null;
+  }
+  return null;
+}
 
 const API_BASE = process.env.SNAPCOMMIT_API ?? "https://api.snapcommit.com";
 
@@ -145,6 +180,8 @@ export function smartExtract(store: MemoryStore) {
 
     const project = args.project ?? detectProject() ?? undefined;
 
+    const nudge = quotaNudge(result.usage.used_this_month, result.usage.monthly_quota) ?? "";
+
     if (args.dry_run) {
       const summary = result.memories
         .map(
@@ -161,7 +198,7 @@ export function smartExtract(store: MemoryStore) {
               "",
               summary,
               "",
-              `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} this month`,
+              `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} this month${nudge}`,
             ].join("\n"),
           },
         ],
@@ -180,7 +217,7 @@ export function smartExtract(store: MemoryStore) {
             `Saved ${saved.length} memories${project ? ` (project: ${project})` : ""}.`,
             `IDs: ${saved.map((s) => "#" + s.id).join(", ")}`,
             ``,
-            `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} smart-extractions this month`,
+            `Usage: ${result.usage.used_this_month} / ${result.usage.monthly_quota} smart-extractions this month${nudge}`,
           ].join("\n"),
         },
       ],

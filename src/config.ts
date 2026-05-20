@@ -35,6 +35,21 @@ export const TIER_QUOTAS: Record<Tier, number> = {
   studio: 10000,
 };
 
+/** Price per month in USD by tier — for offline display. Server is source of truth. */
+export const TIER_PRICES: Record<Tier, number> = {
+  free: 0,
+  hobby: 9,
+  pro: 29,
+  studio: 129,
+};
+
+/** Suggest the next tier up from the current one. */
+export function nextTier(current: Tier): Tier | null {
+  const order: Tier[] = ["free", "hobby", "pro", "studio"];
+  const idx = order.indexOf(current);
+  return idx < 0 || idx === order.length - 1 ? null : order[idx + 1];
+}
+
 function configDir(): string {
   return join(homedir(), ".snapcommit-mcp");
 }

@@ -14,7 +14,8 @@
 
 export interface Env {
   DB: D1Database;
-  ANTHROPIC_API_KEY: string;
+  OPENAI_API_KEY: string;   // primary: GPT-5 Nano for structured extraction
+  GEMINI_API_KEY?: string;  // failover: Gemini 2.5 Flash if OpenAI rate-limits
   DODO_WEBHOOK_SECRET?: string;
 }
 
@@ -69,39 +70,91 @@ async function incrementUsage(env: Env, userId: string): Promise<void> {
     .run();
 }
 
-async function callAnthropic(apiKey: string, content: string): Promise<unknown> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+interface ExtractionResult {
+  memories: Array<{ content: string; kind: string; tags: string[] }>;
+  model: string;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
+async function callOpenAINano(apiKey: string, content: string): Promise<ExtractionResult> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 2048,
-      system: EXTRACTION_SYSTEM_PROMPT,
-      messages: [{ role: "user", content }],
+      model: "gpt-5-nano",
+      messages: [
+        { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+        { role: "user", content },
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: 2048,
     }),
   });
-  if (!res.ok) throw new Error(`upstream ${res.status}`);
-  return await res.json();
+  if (!res.ok) throw new Error(`openai ${res.status}`);
+  const data = (await res.json()) as {
+    choices: Array<{ message: { content: string } }>;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  };
+  return {
+    memories: parseMemoryJSON(data.choices[0]?.message?.content ?? "[]"),
+    model: "gpt-5-nano",
+    input_tokens: data.usage?.prompt_tokens,
+    output_tokens: data.usage?.completion_tokens,
+  };
 }
 
-function parseMemories(raw: unknown): Array<{ content: string; kind: string; tags: string[] }> {
-  const text =
-    (raw as { content?: Array<{ type: string; text?: string }> })?.content?.find(
-      (c) => c.type === "text",
-    )?.text ?? "[]";
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+async function callGeminiFlash(apiKey: string, content: string): Promise<ExtractionResult> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: EXTRACTION_SYSTEM_PROMPT }] },
+        contents: [{ role: "user", parts: [{ text: content }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`gemini ${res.status}`);
+  const data = (await res.json()) as {
+    candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
+    usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
+  };
+  const text = data.candidates[0]?.content?.parts?.[0]?.text ?? "[]";
+  return {
+    memories: parseMemoryJSON(text),
+    model: "gemini-2.5-flash",
+    input_tokens: data.usageMetadata?.promptTokenCount,
+    output_tokens: data.usageMetadata?.candidatesTokenCount,
+  };
+}
+
+async function extract(env: Env, content: string): Promise<ExtractionResult> {
+  // Primary: GPT-5 Nano (best structured-output quality per benchmarks)
+  // Failover: Gemini 2.5 Flash if OpenAI errors
+  try {
+    return await callOpenAINano(env.OPENAI_API_KEY, content);
+  } catch (e) {
+    if (!env.GEMINI_API_KEY) throw e;
+    return await callGeminiFlash(env.GEMINI_API_KEY, content);
+  }
+}
+
+function parseMemoryJSON(raw: string): Array<{ content: string; kind: string; tags: string[] }> {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
   try {
     const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (x) =>
+    const arr = Array.isArray(parsed) ? parsed : (parsed.memories ?? []);
+    return arr.filter(
+      (x: { content?: unknown; kind?: unknown }) =>
         typeof x?.content === "string" &&
         typeof x?.kind === "string" &&
-        ["decision", "rejection", "preference", "fact", "open_question"].includes(x.kind),
+        ["decision", "rejection", "preference", "fact", "open_question"].includes(x.kind as string),
     );
   } catch {
     return [];
@@ -155,19 +208,25 @@ export default {
         return json({ error: "content too long (max 8000 chars)" }, 400);
       }
 
-      let upstream;
+      let result: ExtractionResult;
       try {
-        upstream = await callAnthropic(env.ANTHROPIC_API_KEY, body.content);
+        result = await extract(env, body.content);
       } catch (e) {
         return json({ error: (e as Error).message }, 502);
       }
 
-      const memories = parseMemories(upstream);
       await incrementUsage(env, user.id);
       const newUsed = used + 1;
 
+      // Log metadata only — never content
+      await env.DB.prepare(
+        `INSERT INTO extraction_log (user_id, model, input_tokens, output_tokens, ok) VALUES (?, ?, ?, ?, 1)`,
+      )
+        .bind(user.id, result.model, result.input_tokens ?? null, result.output_tokens ?? null)
+        .run();
+
       return json({
-        memories,
+        memories: result.memories,
         usage: { used_this_month: newUsed, monthly_quota: user.monthly_quota },
       });
     }
