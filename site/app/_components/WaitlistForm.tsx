@@ -1,8 +1,33 @@
 "use client";
 
+/**
+ * Waitlist form — backend-free. POSTs directly to Web3Forms (or any compatible
+ * email-forwarding service). No database, no Edge Functions, no Vercel API
+ * routes required. Works on GitHub Pages, Vercel static, anywhere.
+ *
+ * Set NEXT_PUBLIC_WEB3FORMS_KEY in your env. Get the key (free, no dashboard
+ * needed) at https://web3forms.com/ — they email you on every submission.
+ *
+ * To switch backends later (Formspree, Getform, Supabase, your own):
+ *  - Replace WEB3FORMS_ENDPOINT with the target URL
+ *  - Replace the access_key field with whatever the new backend expects
+ *  - The form fields below stay the same
+ */
 import { useState, FormEvent } from "react";
 
-const TOOLS = ["Claude Code", "Cursor", "VS Code", "Claude Desktop", "Cline", "Windsurf", "Codex CLI", "ChatGPT", "Other"];
+const TOOLS = [
+  "Claude Code",
+  "Cursor",
+  "VS Code",
+  "Claude Desktop",
+  "Cline",
+  "Windsurf",
+  "Codex CLI",
+  "ChatGPT",
+  "Other",
+];
+
+const WEB3FORMS_ENDPOINT = "https://api.web3forms.com/submit";
 
 export function WaitlistForm() {
   const [email, setEmail] = useState("");
@@ -12,34 +37,47 @@ export function WaitlistForm() {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [position, setPosition] = useState<number | null>(null);
 
   function toggleTool(t: string) {
-    setSelectedTools((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]);
+    setSelectedTools((cur) =>
+      cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t],
+    );
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+
+    const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_KEY;
+    if (!accessKey) {
+      setError("Form not configured. Set NEXT_PUBLIC_WEB3FORMS_KEY in your build env.");
+      setBusy(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/waitlist", {
+      const res = await fetch(WEB3FORMS_ENDPOINT, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
+          access_key: accessKey,
+          subject: `New Snapcommit waitlist signup: ${email}`,
+          from_name: "Snapcommit Waitlist",
           email,
-          tools: selectedTools,
+          tools_used: selectedTools.join(", "),
           pain,
-          willingToPay,
-          source: typeof document !== "undefined" ? document.referrer : null,
+          willing_to_pay: willingToPay,
+          referrer: typeof document !== "undefined" ? document.referrer : "",
+          // Web3Forms honeypot — bots fill this; humans don't.
+          botcheck: "",
         }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(body.error ?? `Request failed (${res.status})`);
+      const data = await res.json();
+      if (!data?.success) {
+        setError(data?.message ?? `Submission failed (${res.status})`);
       } else {
         setSent(true);
-        setPosition(body.position ?? null);
       }
     } catch (err) {
       setError((err as Error).message);
@@ -51,17 +89,14 @@ export function WaitlistForm() {
   if (sent) {
     return (
       <div className="text-sm">
-        <p className="text-[var(--accent)] font-medium mb-3">You're in.</p>
-        {position && (
-          <p className="text-[var(--muted)] mb-4 font-mono text-xs">
-            position #{position} on the waitlist
-          </p>
-        )}
+        <p className="text-[var(--accent)] font-medium mb-3">You're in. Welcome.</p>
         <p className="text-[var(--muted)] mb-4">
-          We'll email you when beta opens. Want to move up the queue?
+          We'll email when beta opens — weeks, not months. First 500 on the waitlist get
+          founders' pricing locked for life.
         </p>
         <p className="text-[var(--muted)]">
-          Share <code className="text-[var(--fg)]">snapcommit.com</code> with one friend who'd care. Every signup that mentions you in the "how did you hear" field bumps you 3 spots.
+          Want to move up the queue? Share <code className="text-[var(--fg)]">snapcommit.com</code>{" "}
+          with one friend who's tired of re-explaining their project to AI every session.
         </p>
       </div>
     );
@@ -70,7 +105,10 @@ export function WaitlistForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       <div>
-        <label htmlFor="email" className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-2 font-mono">
+        <label
+          htmlFor="email"
+          className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-2 font-mono"
+        >
           email
         </label>
         <input
@@ -107,7 +145,10 @@ export function WaitlistForm() {
       </div>
 
       <div>
-        <label htmlFor="pain" className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-2 font-mono">
+        <label
+          htmlFor="pain"
+          className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-2 font-mono"
+        >
           biggest frustration with how your AI handles context
         </label>
         <textarea
@@ -149,7 +190,7 @@ export function WaitlistForm() {
         disabled={busy || !email}
         className="w-full bg-[var(--accent)] text-[var(--bg)] py-2.5 rounded font-medium disabled:opacity-50 text-sm"
       >
-        {busy ? "joining…" : "join the waitlist"}
+        {busy ? "joining…" : "join the waitlist →"}
       </button>
 
       <p className="text-[10px] text-[var(--muted)] text-center font-mono">
