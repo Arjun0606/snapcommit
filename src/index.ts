@@ -5,6 +5,8 @@ import { MemoryStore } from "./db.js";
 import { saveMemory, saveMemorySchema } from "./tools/save.js";
 import { recallMemory, recallMemorySchema } from "./tools/recall.js";
 import { listProjects } from "./tools/projects.js";
+import { listMemories, listMemoriesSchema } from "./tools/list.js";
+import { exportMemories, exportMemoriesSchema } from "./tools/export.js";
 import {
   updateMemory,
   updateMemorySchema,
@@ -39,6 +41,20 @@ async function main(): Promise<void> {
     "List all projects with memory counts. Use this to orient yourself when starting work.",
     {},
     listProjects(store),
+  );
+
+  server.tool(
+    "list_memories",
+    "Browse memories without searching. Returns the most recent memories, optionally filtered by project or kind. Use when you want to see what's been remembered rather than search for something specific.",
+    listMemoriesSchema,
+    listMemories(store),
+  );
+
+  server.tool(
+    "export_memories",
+    "Export memories as Markdown or JSON. Useful when the user wants to back up, share, or paste their memory into another system. Always offer this — data portability is a core trust signal.",
+    exportMemoriesSchema,
+    exportMemories(store),
   );
 
   server.tool(
