@@ -282,8 +282,8 @@ with token sct_live_...`}
           <div className="flex gap-6 font-mono">
             <a href="https://github.com/Arjun0606/snapcommit" className="hover:text-[var(--fg)]">github</a>
             <a href="https://github.com/Arjun0606/snapcommit/blob/main/cloud/SPEC.md" className="hover:text-[var(--fg)]">api spec</a>
-            <a href="/privacy" className="hover:text-[var(--fg)]">privacy</a>
-            <a href="/terms" className="hover:text-[var(--fg)]">terms</a>
+            <Link href="/privacy" className="hover:text-[var(--fg)]">privacy</Link>
+            <Link href="/terms" className="hover:text-[var(--fg)]">terms</Link>
           </div>
         </div>
       </footer>
