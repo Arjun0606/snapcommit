@@ -1,12 +1,16 @@
 # Snapcommit
 
-**Git for your AI context.** One MCP server. Memory across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf + 25 more clients. Local-first. Open source.
+**Local-first memory for your AI tools. Sync to your own Notion.**
+
+One MCP server. Memory across Claude Code, Cursor, VS Code, Claude Desktop, Cline, Windsurf + 25 more clients. Your data lives on your machine. Optionally synced to your own Notion workspace for cross-device access and team sharing.
+
+We are not a database. The user's Notion workspace is.
 
 ```bash
 npx @snapcommit/install
 ```
 
-That's it. Snapcommit detects which AI tools you have installed, configures each one, and now your AI remembers across every session and every tool.
+That's it. Snapcommit detects your AI tools, wires itself into each, and now they remember across every session.
 
 ## Why
 
@@ -15,28 +19,63 @@ You re-explain your project to every new AI session. You re-state preferences. Y
 Existing fixes are bad:
 - **OpenMemory** claims "local-first" but ships your data to Mem0's cloud
 - **Supermemory** is server-side, $19/mo
-- **Mem AI** burned $40M and pivoted
-- **Markdown files** go stale, don't sync, and live in 4 different formats per tool
+- **Mem AI** burned $40M trying to be the database
+- **Markdown files** go stale, don't sync, live in 4 different formats per tool
 
-Snapcommit is **genuinely** local-first. Memories live in a SQLite file on your machine (`~/.snapcommit-mcp/memories.db`). Cloud sync is opt-in and paid, never default.
+Snapcommit is **genuinely** local-first. Memories live in a SQLite file on your machine at `~/.snapcommit-mcp/memories.db`. If you want cross-device sync or to share with a teammate, you connect your own Notion workspace and we mirror to it. We host nothing.
 
 ## What it does
 
-The MCP server exposes five tools your AI calls automatically:
+The MCP server exposes 11 tools your AI calls automatically:
 
-| Tool | When the AI calls it |
-|------|---------------------|
-| `save_memory` | When something is worth remembering: a decision, an approach you tried and rejected (with reasons), a preference, a fact about the codebase, an open question |
-| `recall_memory` | At the start of a session or whenever past context is relevant |
-| `list_projects` | To orient itself across multiple projects |
+### Memory (local SQLite, always-on)
+
+| Tool | When |
+|------|------|
+| `save_memory` | When something is worth remembering: a decision, an approach tried and rejected (with reasons), a preference, a fact about the codebase, an open question |
+| `recall_memory` | At session start, or when past context is relevant |
+| `list_memories` | To browse without searching |
+| `list_projects` | To orient across projects |
 | `update_memory` | When a memory needs revision |
-| `delete_memory` | When a memory is wrong or obsolete |
+| `delete_memory` | When wrong or obsolete |
+| `export_memories` | JSON or Markdown export (paste anywhere) |
 
-**The killer feature**: Snapcommit captures *rejections*, not just decisions. Every other memory tool only stores what you ended up doing. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the same mistakes.
+### Notion sync (optional, user's own workspace)
 
-## Manual install
+| Tool | When |
+|------|------|
+| `snapcommit_notion_setup` | One-time: paste token + parent page URL, we create a database |
+| `snapcommit_notion_sync` | Push local memories to your Notion (idempotent) |
+| `snapcommit_notion_status` | Check connection state |
+| `snapcommit_notion_pull` | Inspect Notion vs local counts |
 
-If `npx @snapcommit/install` doesn't auto-detect your client, add this to your MCP config:
+**The differentiator**: Snapcommit captures *rejections*, not just decisions. Every other memory tool only stores final answers. Snapcommit remembers what you tried and *why it didn't work* — so future sessions don't repeat the same mistakes.
+
+## Notion setup (90 seconds)
+
+1. Go to [notion.so/profile/integrations](https://www.notion.so/profile/integrations)
+2. Click **+ New integration**, name it "Snapcommit", choose your workspace, save
+3. Copy the **Internal Integration Secret** (starts with `secret_` or `ntn_`)
+4. In Notion, create a page where you want your memory to live (e.g. "AI Memory"). Open it, click `···` → **Add connections** → pick **Snapcommit**.
+5. Copy the page URL.
+6. In your AI tool, run:
+   > "Set up Snapcommit Notion sync with token `secret_...` and parent page `https://www.notion.so/...`"
+
+That's it. A "Snapcommit Memory" database appears in your page. Your AI starts saving there too.
+
+**Your token never leaves your machine.** Stored at `~/.snapcommit-mcp/notion.json` with `chmod 600`.
+
+## What you get from Notion sync
+
+- **Cross-device** — log into Notion on any device, your memory's there
+- **Sharing** — share the database with teammates the normal Notion way
+- **Native editing** — fix typos, add tags, link memories in Notion's UI
+- **Backup** — your memories are in your own workspace, not ours
+- **Mobile access** — Notion's mobile app works
+
+## Manual MCP install
+
+If `npx @snapcommit/install` doesn't auto-detect your client, add to your MCP config:
 
 **Claude Code:**
 ```bash
@@ -45,7 +84,6 @@ claude mcp add snapcommit -- npx -y @snapcommit/mcp
 
 **Cursor / Claude Desktop / Continue / Cline / Windsurf / VS Code:**
 
-Add to your `mcp.json` (or equivalent):
 ```json
 {
   "mcpServers": {
@@ -59,16 +97,16 @@ Add to your `mcp.json` (or equivalent):
 
 ## Pricing
 
-- **Free forever** — local-only, unlimited memories, full features, MIT licensed
-- **$9/mo Pro** — encrypted cloud sync, browse-anywhere web dashboard, advanced extraction
-- **$99 lifetime** — one-time backer tier, Pro forever, supports the project
+**Free. Forever. MIT licensed.**
+
+We don't store your data, so we don't have storage costs to charge for. The product is free open source. If we ever monetize, it'll be optional convenience tooling — never paid storage tiers, never feature gating the memory itself.
 
 ## Privacy
 
-- Data lives in `~/.snapcommit-mcp/memories.db` on your machine
-- We never read your memories. We can't — they're on your disk.
-- Cloud sync (paid tier) is end-to-end encrypted with your passphrase
-- No telemetry that captures content. Ever.
+- Data lives in `~/.snapcommit-mcp/memories.db` on your machine. Nowhere else by default.
+- Notion sync is opt-in. When you opt in, data syncs to **your own Notion workspace**, not ours.
+- No telemetry. We don't even know you exist.
+- Open source — read the code, fork it, self-host it.
 
 ## Development
 
@@ -77,12 +115,20 @@ git clone https://github.com/Arjun0606/snapcommit
 cd snapcommit
 npm install
 npm run build
-npm run inspect  # opens MCP Inspector for local testing
+./node_modules/.bin/vitest run
+```
+
+Dashboard:
+```bash
+cd dashboard
+npm install
+npm run dev
+# http://localhost:4000
 ```
 
 ## Why "Snapcommit"
 
-You snap a moment from your conversation. Commit it to memory. Recall it anywhere. Like git, but for context. The mental model is intentionally familiar to developers.
+You snap a moment from your conversation. Commit it to memory. Recall it anywhere. Like git, but for AI context. The mental model is intentionally familiar to developers.
 
 ## License
 

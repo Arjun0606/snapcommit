@@ -13,6 +13,14 @@ import {
   deleteMemory,
   deleteMemorySchema,
 } from "./tools/update.js";
+import {
+  notionSetup,
+  notionSetupSchema,
+  notionSync,
+  notionSyncSchema,
+  notionStatus,
+  notionPull,
+} from "./tools/notion.js";
 
 async function main(): Promise<void> {
   const store = new MemoryStore();
@@ -69,6 +77,38 @@ async function main(): Promise<void> {
     "Delete a memory by id. Use sparingly — only when the memory is clearly wrong or obsolete.",
     deleteMemorySchema,
     deleteMemory(store),
+  );
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Notion sync — optional. We are not a database. The user's Notion is.
+  // ──────────────────────────────────────────────────────────────────────
+
+  server.tool(
+    "snapcommit_notion_setup",
+    "Connect Snapcommit to the user's Notion workspace. Creates a 'Snapcommit Memory' database in a parent page they choose. The user needs: (1) an internal Notion integration token from https://www.notion.so/profile/integrations, and (2) a parent page they've shared with that integration. Their token never leaves their machine.",
+    notionSetupSchema,
+    notionSetup(),
+  );
+
+  server.tool(
+    "snapcommit_notion_sync",
+    "Push local memories to the user's connected Notion database. Idempotent — re-running updates existing rows instead of duplicating. Call this when the user wants to back up, share, or access memories from another device via Notion.",
+    notionSyncSchema,
+    notionSync(store),
+  );
+
+  server.tool(
+    "snapcommit_notion_status",
+    "Check if Notion sync is configured, and report workspace + database URL if so. Use this when the user asks about backup, sharing, or cross-device access.",
+    {},
+    notionStatus(),
+  );
+
+  server.tool(
+    "snapcommit_notion_pull",
+    "Inspect the user's Notion database and report counts vs local SQLite. Read-only in v1; does not merge Notion edits back into local. Useful for verifying sync state.",
+    {},
+    notionPull(store),
   );
 
   const transport = new StdioServerTransport();

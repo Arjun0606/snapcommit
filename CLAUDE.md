@@ -10,6 +10,33 @@ These rules are non-negotiable. Every decision passes through them.
 
 If a feature doesn't make the markdown-context workaround look primitive in comparison, it's not in v1. The bar is "10x better than maintaining your own .md file," not "slightly better."
 
+## The architecture principle (locked Nov 2026)
+
+**We are a tool enabler, not a database.**
+
+Memories live in two places and we own neither:
+1. **Local SQLite** on the user's machine (working memory, fast, default)
+2. **The user's own Notion workspace** (optional, opt-in, their sync + share layer)
+
+We do NOT run cloud infrastructure to store user data. Ever. This kills an entire category of cost, complexity, and trust problems in one move:
+
+- No cloud sync infrastructure to build
+- No Stripe to charge for storage
+- No backups to manage
+- No security audits / SOC2 / GDPR theater required
+- No vendor lock-in concern for users (their data is in their Notion)
+- No data breach risk on our side
+- Notion already solves: cross-device sync, sharing with teammates, native mobile editing, search, history
+
+The Plaid/Stripe pattern: we are the wire between the AI tool and the user's own storage. The user picks the storage.
+
+What this means concretely:
+- v1 = free, MIT, open source forever — no paid tier for storage
+- Future revenue (if any) = optional managed/hosted convenience, or premium clients, never paid storage
+- Sharing = "share your Notion database with your teammate" (Notion already does this perfectly)
+- Cross-device = "log into Notion from your laptop and phone" (already solved)
+- Backup = "your Notion workspace is the backup"
+
 ## Hard constraints
 
 1. **Solo-buildable.** No feature requires a team, co-founder, or hire. If a path can't be shipped by one person in one weekend (per feature), it's wrong.
@@ -25,18 +52,20 @@ If a feature doesn't make the markdown-context workaround look primitive in comp
 
 ## What's IN v1
 
-1. MCP server with tools: `save_memory`, `recall_memory`, `list_projects`, `update_memory`, `delete_memory`
-2. Local SQLite storage with passphrase-derived encryption
-3. `npx @snapcommit/install` — auto-detects Claude Code / Cursor / VS Code / Claude Desktop / Cline / Windsurf and writes config to each
-4. Simple web dashboard (Next.js) for browse/search/edit memories
-5. Project-aware routing (heuristics first, smarter later)
-6. Captures decisions AND rejections (not just facts)
+1. MCP server with tools: `save_memory`, `recall_memory`, `list_memories`, `list_projects`, `update_memory`, `delete_memory`, `export_memories`
+2. **Local SQLite** as the canonical working store (`~/.snapcommit-mcp/memories.db`)
+3. **Optional Notion sync** — user brings their own Notion token, we sync to a database in their workspace
+4. `npx @snapcommit/install` — auto-detects Claude Code / Cursor / VS Code / Claude Desktop / Cline / Windsurf
+5. Simple web dashboard (Next.js) for browse/search/edit memories
+6. Project-aware routing (auto-detect from git remote / CWD)
+7. Captures decisions AND rejections (not just facts)
 
 ## What's OUT of v1 (and probably out of v2)
 
-- ❌ Team workspaces
-- ❌ Shared memories between users
-- ❌ Cross-device sync (v2 candidate, NOT v1)
+- ❌ **Our own cloud sync** — Notion is the sync layer, we don't host it
+- ❌ **Paid storage tier** — never charging for data we don't own
+- ❌ Team workspaces in OUR product (Notion handles team sharing for free)
+- ❌ Stripe / billing — no paid tier in v1
 - ❌ Chrome extension (v3 maybe)
 - ❌ Mobile app
 - ❌ Voice mode
@@ -44,12 +73,14 @@ If a feature doesn't make the markdown-context workaround look primitive in comp
 - ❌ Custom model fine-tuning
 - ❌ Anything requiring training data collection
 - ❌ Auto-update without explicit user consent (no OpenMemory-style deception)
+- ❌ Sync targets other than Notion in v1 (Obsidian/Linear/Airtable maybe later)
 
 ## Tech stack (locked)
 
 - TypeScript, ESM modules
 - `@modelcontextprotocol/sdk` — official MCP SDK
 - `better-sqlite3` — local storage (sync, fast, simple, file-based)
+- `@notionhq/client` — Notion API (optional sync target, user brings token)
 - `zod` — schema validation
 - `@xenova/transformers` — local embeddings if needed (no API cost)
 - Node 20+ (let LTS handle compatibility)
